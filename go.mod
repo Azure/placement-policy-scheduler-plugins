@@ -11,11 +11,9 @@ require (
 	k8s.io/apimachinery v0.21.4
 	k8s.io/apiserver v0.21.4
 	k8s.io/client-go v0.21.4
-	k8s.io/code-generator v0.21.4
 	k8s.io/component-base v0.21.4
 	k8s.io/klog/v2 v2.8.0
 	k8s.io/kube-aggregator v0.0.0
-	k8s.io/kube-openapi v0.0.0-20210305001622-591a79e4bda7
 	k8s.io/kube-scheduler v0.21.4
 	k8s.io/kubernetes v1.21.4
 	sigs.k8s.io/scheduler-plugins v0.20.10
