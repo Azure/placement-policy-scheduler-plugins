@@ -56,3 +56,28 @@ lint: $(GOLANGCI_LINT)
 .PHONY: lint-full
 lint-full: $(GOLANGCI_LINT) ## Run slower linters to detect possible issues
 	$(GOLANGCI_LINT) run -v --fast=false
+
+## --------------------------------------
+## Code Generation
+## --------------------------------------
+
+# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= "crd:crdVersions=v1"
+
+# Generate manifests e.g. CRD, RBAC etc.
+.PHONY: manifests
+manifests: $(CONTROLLER_GEN)
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+# Generate code
+generate: $(CONTROLLER_GEN)
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+## --------------------------------------
+## Binaries
+## --------------------------------------
+
+# Build manager binary
+.PHONY: manager
+manager: generate fmt vet
+	go build -o bin/manager cmd/scheduler/main.go

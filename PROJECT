@@ -1,0 +1,7 @@
+domain: placement-policy.scheduling.x-k8s.io
+repo: github.com/Azure/placement-policy-scheduler-plugins
+resources:
+- group: placement-policy.scheduling.x-k8s.io
+  kind: PlacementPolicy
+  version: v1alpha1
+version: "2"
