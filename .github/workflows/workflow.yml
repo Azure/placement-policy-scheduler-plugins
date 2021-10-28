@@ -1,0 +1,34 @@
+name: test
+
+on: [pull_request]
+
+jobs:
+  lint:
+    name: "Lint"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+    - name: Set up Go 1.17
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.17
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+    - name: golangci-lint
+      run: make lint
+
+  unit-test:
+    name: "Unit Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Set up Go 1.17
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.17
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+    - name: Run unit tests
+      run: make test
