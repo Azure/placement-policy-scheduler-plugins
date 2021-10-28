@@ -16,6 +16,10 @@ GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 # Scripts
 GO_INSTALL := ./hack/go-install.sh
 
+# E2E test variables
+KIND_VERSION ?= 0.11.0
+KIND_K8S_VERSION ?= v1.22.2
+
 ## --------------------------------------
 ## Tooling Binaries
 ## --------------------------------------
@@ -81,3 +85,16 @@ generate: $(CONTROLLER_GEN)
 .PHONY: manager
 manager: generate fmt vet
 	go build -o bin/manager cmd/scheduler/main.go
+
+## --------------------------------------
+## e2e Testing
+## --------------------------------------
+
+# Setup KinD cluster
+.PHONY: setup-kind
+setup-kind:
+	curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
+	# Check for existing kind cluster
+	if [ $$(kind get clusters) ]; then kind delete cluster; fi
+	# using kind config to create cluster for testing custom cloud environments
+	TERM=dumb kind create cluster --image kindest/node:${KIND_K8S_VERSION} --config test/e2e/kind-config.yaml
