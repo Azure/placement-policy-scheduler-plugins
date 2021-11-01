@@ -76,6 +76,8 @@ type PlacementPolicyStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PlacementPolicy is the Schema for the placementpolicies API
 type PlacementPolicy struct {
@@ -87,14 +89,11 @@ type PlacementPolicy struct {
 }
 
 //+kubebuilder:object:root=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PlacementPolicyList contains a list of PlacementPolicy
 type PlacementPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PlacementPolicy `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&PlacementPolicy{}, &PlacementPolicyList{})
 }
