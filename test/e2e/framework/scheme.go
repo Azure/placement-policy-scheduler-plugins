@@ -4,14 +4,13 @@
 package framework
 
 import (
+	"github.com/Azure/placement-policy-scheduler-plugins/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1beta "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	schedv1alpha1 "sigs.k8s.io/scheduler-plugins/pkg/apis/scheduling/v1alpha1"
-
-	"github.com/Azure/placement-policy-scheduler-plugins/api/v1alpha1"
 )
 
 const (
