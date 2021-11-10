@@ -3,29 +3,26 @@ package integration
 import (
 	"context"
 	"os"
+	"testing"
 	"time"
 
-	"testing"
+	v1 "github.com/Azure/placement-policy-scheduler-plugins/api/v1alpha1"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
-
-	//"k8s.io/kubernetes/pkg/scheduler"
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 	testutil "k8s.io/kubernetes/test/integration/util"
 
-	v1 "github.com/Azure/placement-policy-scheduler-plugins/api/v1alpha1"
 	"sigs.k8s.io/scheduler-plugins/pkg/apis/scheduling"
 	"sigs.k8s.io/scheduler-plugins/test/util"
 )
 
-func TestPlacementPloicyPlugins(t *testing.T) {
+func TestPlacementPolicyPlugins(t *testing.T) {
 
 	todo := context.TODO()
 	ctx, cancelFunc := context.WithCancel(todo)

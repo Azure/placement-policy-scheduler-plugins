@@ -1,3 +1,6 @@
+//go:build e2e
+// +build e2e
+
 package pod
 
 import (
@@ -6,8 +9,10 @@ import (
 
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/Azure/placement-policy-scheduler-plugins/test/e2e/framework"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"

@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/Azure/go-autorest/autorest/to v0.4.0
-	github.com/Azure/placement-policy-scheduler-plugins v0.0.0-00000000000000-000000000000
+	github.com/Azure/placement-policy-scheduler-plugins v0.0.0-00010101000000-000000000000
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.16.0
 	k8s.io/api v0.22.2
@@ -12,7 +12,7 @@ require (
 	k8s.io/apimachinery v0.22.2
 	k8s.io/kubernetes v1.22.2
 	sigs.k8s.io/controller-runtime v0.10.2
-	sigs.k8s.io/scheduler-plugins v0.20.10
+	sigs.k8s.io/scheduler-plugins v0.21.6
 )
 
 require (
@@ -60,7 +60,7 @@ require (
 	k8s.io/component-helpers v0.22.2 // indirect
 	k8s.io/klog/v2 v2.9.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20210421082810-95288971da7e // indirect
-	k8s.io/kube-scheduler v0.20.10 // indirect
+	k8s.io/kube-scheduler v0.21.6 // indirect
 	k8s.io/utils v0.0.0-20210819203725-bdf08cb9a70a // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.2 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
