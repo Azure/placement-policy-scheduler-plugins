@@ -16,6 +16,7 @@
 
 # IDE custom files
 .vscode
+.idea
 
 # binary output
 bin/
