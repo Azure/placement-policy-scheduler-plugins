@@ -1,3 +1,8 @@
+# TODO(aramase) use the github registry to publish the image
+REGISTRY ?= aramase
+IMAGE_NAME := placement-policy
+IMAGE_VERSION ?= v0.1.0
+
 # Directories
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
@@ -118,3 +123,28 @@ integration-test: install-etcd autogen manager manifests
 .PHONY: e2e-test
 e2e-test: 
 	go test -tags=e2e -v ./test/e2e
+
+## --------------------------------------
+## Images
+## --------------------------------------
+
+OUTPUT_TYPE ?= type=registry
+BUILDX_BUILDER_NAME ?= img-builder
+QEMU_VERSION ?= 5.2.0-2
+
+.PHONY: docker-buildx-builder
+docker-buildx-builder:
+	@if ! docker buildx ls | grep $(BUILDX_BUILDER_NAME); then \
+		docker run --rm --privileged multiarch/qemu-user-static:$(QEMU_VERSION) --reset -p yes; \
+		docker buildx create --name $(BUILDX_BUILDER_NAME) --use; \
+		docker buildx inspect $(BUILDX_BUILDER_NAME) --bootstrap; \
+	fi
+
+.PHONY: docker-build
+docker-build: docker-buildx-builder
+	docker buildx build \
+		--file Dockerfile \
+		--output=$(OUTPUT_TYPE) \
+		--platform="linux/amd64" \
+		--pull \
+		--tag $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_VERSION) .

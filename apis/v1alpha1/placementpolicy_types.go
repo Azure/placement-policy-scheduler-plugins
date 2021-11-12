@@ -22,6 +22,11 @@ const (
 	ActionMust Action = "Must"
 	// ActionMustNot means the pods must not be placed on the node
 	ActionMustNot Action = "MustNot"
+
+	// PlacementPolicyAnnotationKey is the annotation key for placement policy
+	PlacementPolicyAnnotationKey = "placement-policy.x-k8s.io/policy-name"
+	// PlacementPolicyPreferenceAnnotationKey is the annotation key for placement policy node preference
+	PlacementPolicyPreferenceAnnotationKey = "placement-policy.x-k8s.io/node-preference-matching-labels"
 )
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
