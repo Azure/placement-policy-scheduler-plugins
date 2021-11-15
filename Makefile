@@ -15,6 +15,9 @@ GOLANGCI_LINT := $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER)
 
 # Scripts
 GO_INSTALL := ./hack/go-install.sh
+UPDATE_GENERATED_OPENAPI := ./hack/update-generated-openapi.sh
+INSTALL_ETCD := ./hack/install-etcd.sh
+RUN_TEST := ./hack/run-test.sh
 
 # E2E test variables
 KIND_VERSION ?= 0.11.0
@@ -44,10 +47,21 @@ fmt:
 vet:
 	go vet ./...
 
+# Run go mod vendor against go.mod
+.PHONY: vendor
+vendor:
+	go mod tidy
+	go mod vendor
+
+# Install etcd
+.PHONY: install-etcd
+install-etcd:
+	$(INSTALL_ETCD)
+
 # Run tests
 .PHONY: test
-test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+test: install-etcd autogen manager manifests
+	$(RUN_TEST)
 
 ## --------------------------------------
 ## Linting
@@ -85,6 +99,11 @@ generate: $(CONTROLLER_GEN)
 .PHONY: manager
 manager: generate fmt vet
 	go build -o bin/manager cmd/scheduler/main.go
+
+
+.PHONY: autogen
+autogen: vendor
+	$(UPDATE_GENERATED_OPENAPI)
 
 ## --------------------------------------
 ## e2e Testing
