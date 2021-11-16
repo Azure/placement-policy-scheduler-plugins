@@ -7,11 +7,9 @@ import (
 	"testing"
 
 	"github.com/Azure/placement-policy-scheduler-plugins/test/e2e/framework"
-
-	"k8s.io/apimachinery/pkg/runtime"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestE2e(t *testing.T) {
