@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+#https://github.com/kubernetes-sigs/scheduler-plugins/blob/master/hack/lib/golang.sh
 
 # Ensure the go tool exists and is a viable version.
 kube::golang::verify_go_version() {

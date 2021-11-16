@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#https://github.com/kubernetes-sigs/scheduler-plugins/blob/master/hack/lib/util.sh
 
 kube::util::host_os() {
   local host_os
