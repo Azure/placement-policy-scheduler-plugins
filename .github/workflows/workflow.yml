@@ -6,7 +6,7 @@ jobs:
   lint:
     name: "Lint"
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -22,7 +22,7 @@ jobs:
   unit-test:
     name: "Unit Test"
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
     - name: Set up Go 1.17
       uses: actions/setup-go@v2
