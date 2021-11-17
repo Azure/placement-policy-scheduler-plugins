@@ -21,3 +21,8 @@
 # binary output
 bin/
 hack/tools/bin/
+
+# used for the code generators only
+vendor/
+etcd/
+etcd-v3.4.9-darwin-amd64/
