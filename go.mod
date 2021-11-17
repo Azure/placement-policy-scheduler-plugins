@@ -5,14 +5,17 @@ go 1.17
 require (
 	github.com/onsi/ginkgo v1.16.4
 	k8s.io/api v0.22.2
+	k8s.io/apiextensions-apiserver v0.22.2
 	k8s.io/apimachinery v0.22.2
 	k8s.io/client-go v0.22.2
 	k8s.io/code-generator v0.22.2
 	k8s.io/klog/hack/tools v0.0.0-20211022075437-9ad246211af1
 	k8s.io/klog/v2 v2.9.0
 	k8s.io/kube-openapi v0.0.0-20210421082810-95288971da7e
+	k8s.io/kube-scheduler v0.21.6
 	k8s.io/kubernetes v1.22.2
 	sigs.k8s.io/e2e-framework v0.0.5
+	sigs.k8s.io/yaml v1.2.0
 )
 
 require (
@@ -138,7 +141,6 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/apiextensions-apiserver v0.22.2 // indirect
 	k8s.io/apiserver v0.22.2 // indirect
 	k8s.io/cloud-provider v0.22.2 // indirect
 	k8s.io/cluster-bootstrap v0.0.0 // indirect
@@ -147,7 +149,6 @@ require (
 	k8s.io/csi-translation-lib v0.22.2 // indirect
 	k8s.io/gengo v0.0.0-20201214224949-b6c5ce23f027 // indirect
 	k8s.io/kube-aggregator v0.0.0 // indirect
-	k8s.io/kube-scheduler v0.21.6 // indirect
 	k8s.io/kubectl v0.0.0 // indirect
 	k8s.io/kubelet v0.0.0 // indirect
 	k8s.io/legacy-cloud-providers v0.0.0 // indirect
@@ -157,7 +158,6 @@ require (
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.22 // indirect
 	sigs.k8s.io/controller-runtime v0.10.3 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.2 // indirect
-	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
 replace (

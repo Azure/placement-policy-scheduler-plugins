@@ -20,6 +20,7 @@ const (
 	Name = "placementpolicy"
 )
 
+var _ framework.QueueSortPlugin = &Plugin{}
 var _ framework.ScorePlugin = &Plugin{}
 var _ framework.FilterPlugin = &Plugin{}
 
@@ -57,4 +58,9 @@ func (p *Plugin) NormalizeScore(ctx context.Context, state *framework.CycleState
 
 func (p *Plugin) Filter(ctx context.Context, cycleState *framework.CycleState, pod *corev1.Pod, nodeInfo *framework.NodeInfo) *framework.Status {
 	return nil
+}
+
+// Less is used to sort pods in the scheduling queue
+func (cs *Plugin) Less(podInfo1, podInfo2 *framework.QueuedPodInfo) bool {
+	return true
 }
