@@ -5,7 +5,6 @@ package framework
 
 import (
 	"github.com/Azure/placement-policy-scheduler-plugins/apis/v1alpha1"
-
 	schedv1alpha1 "sigs.k8s.io/scheduler-plugins/pkg/apis/scheduling/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
