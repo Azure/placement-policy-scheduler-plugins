@@ -1,0 +1,1 @@
+# Chart to run placement policy scheduler plugins as a second scheduler in cluster.
