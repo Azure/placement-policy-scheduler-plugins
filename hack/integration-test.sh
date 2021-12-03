@@ -33,7 +33,7 @@ runTests() {
   kube::etcd::start
   kube::log::status "Running integration test cases"
 
-  go test ./... -mod=vendor -coverprofile cover.out
+  go test ./test/integration/. -mod=vendor -coverprofile cover.out
 
   cleanup
 }
