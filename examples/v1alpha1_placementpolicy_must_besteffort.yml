@@ -1,0 +1,16 @@
+apiVersion: placement-policy.scheduling.x-k8s.io/v1alpha1
+kind: PlacementPolicy
+metadata:
+  name: besteffort-must
+spec:
+  weight: 100
+  enforcementMode: BestEffort
+  podSelector:
+    matchLabels:
+      app: nginx
+  nodeSelector:
+    matchLabels:
+      node: want
+  policy:
+    action: Must
+    targetSize: 40%

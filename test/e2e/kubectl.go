@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/onsi/ginkgo"
+	"k8s.io/klog/v2"
 )
 
 // KubectlApply executes "kubectl apply" given a list of arguments.
@@ -80,7 +80,7 @@ func KubectlDescribe(kubeconfigPath, podName, namespace string) (string, error) 
 }
 
 func kubectl(args []string) (string, error) {
-	ginkgo.By(fmt.Sprintf("kubectl %s", strings.Join(args, " ")))
+	klog.Infof("kubectl %s", strings.Join(args, " "))
 
 	cmd := exec.Command("kubectl", args...)
 	stdoutStderr, err := cmd.CombinedOutput()
