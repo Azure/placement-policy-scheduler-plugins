@@ -11,7 +11,11 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/e2e-framework/klient/k8s"
+	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
@@ -23,45 +27,59 @@ func TestAssignDifferentDeployments(t *testing.T) {
 			// deploy placement policy config
 			wd, err := os.Getwd()
 			if err != nil {
-				t.Fatal(err)
+				klog.ErrorS(err, "Failed to find folder path")
+				return ctx
 			}
 
 			exampleResourceAbsolutePath, err := filepath.Abs(filepath.Join(wd, "/../../", "examples"))
 			if err != nil {
-				t.Fatal(err)
+				klog.ErrorS(err, "Failed to resource file")
+				return ctx
 			}
 			if err := KubectlApply(cfg.KubeconfigFile(), cfg.Namespace(), []string{"-f", filepath.Join(exampleResourceAbsolutePath, "v1alpha_placementpolicy.yml")}); err != nil {
-				t.Fatal(err)
+				klog.ErrorS(err, "Failed to deploy the placement policy scheduler config")
+				return ctx
 			}
-			time.Sleep(5 * time.Second)
-			labels := map[string]string{"node": "want"}
 
+			labels := map[string]string{"node": "want"}
 			deployment := NewDeployment(cfg.Namespace(), "deployment-test", 1, labels)
 			if err := cfg.Client().Resources().Create(ctx, deployment); err != nil {
-				t.Fatal(err)
+				klog.ErrorS(err, "Failed to create the deployment")
+				return ctx
 			}
-			time.Sleep(2 * time.Second)
+
 			return ctx
 		}).
 		Assess("Deployment successfully assigned to the right nodes", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			var resultDeployment appsv1.Deployment
-			if err := cfg.Client().Resources().Get(ctx, "deployment-test", cfg.Namespace(), &resultDeployment); err != nil {
-				klog.ErrorS(err, "Deployment Failed!")
+			client, err := cfg.NewClient()
+			if err != nil {
+				klog.ErrorS(err, "Failed to create new client")
+				return ctx
+			}
+			resultDeployment := appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "deployment-test", Namespace: cfg.Namespace()},
 			}
 
-			if &resultDeployment != nil {
-				t.Logf("deployment found: %s", resultDeployment.Name)
+			err = wait.For(conditions.New(client.Resources()).ResourceMatch(&resultDeployment, func(object k8s.Object) bool {
+				d := object.(*appsv1.Deployment)
+				return float64(d.Status.ReadyReplicas)/float64(*d.Spec.Replicas) >= 1
+			}), wait.WithTimeout(time.Minute*1))
+
+			if err != nil {
+				t.Error("deployment not found")
 			}
+
 			return context.WithValue(ctx, "deployment-test", &resultDeployment)
 		}).
 		Teardown(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			client, err := cfg.NewClient()
 			if err != nil {
-				t.Fatal(err)
+				klog.ErrorS(err, "Failed to create new client")
+				return ctx
 			}
 			dep := ctx.Value("deployment-test").(*appsv1.Deployment)
 			if err := client.Resources().Delete(ctx, dep); err != nil {
-				t.Fatal(err)
+				klog.ErrorS(err, "Failed to delete the deployment")
 			}
 			return ctx
 		}).Feature()
