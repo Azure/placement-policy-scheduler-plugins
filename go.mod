@@ -12,7 +12,7 @@ require (
 	k8s.io/klog/v2 v2.9.0
 	k8s.io/kube-openapi v0.0.0-20210421082810-95288971da7e
 	k8s.io/kubernetes v1.22.2
-	sigs.k8s.io/e2e-framework v0.0.4
+	sigs.k8s.io/e2e-framework v0.0.5
 )
 
 require (
