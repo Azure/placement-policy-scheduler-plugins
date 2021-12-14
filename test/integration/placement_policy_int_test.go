@@ -77,11 +77,9 @@ func TestPlacementPolicyPlugins(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg.Profiles[0].Plugins.QueueSort = schedapi.PluginSet{
-		Enabled:  []schedapi.Plugin{{Name: placementpolicy.Name}},
-		Disabled: []schedapi.Plugin{{Name: "*"}},
-	}
+	cfg.Profiles[0].Plugins.PreFilter.Enabled = append(cfg.Profiles[0].Plugins.PreFilter.Enabled, schedapi.Plugin{Name: placementpolicy.Name})
 	cfg.Profiles[0].Plugins.Filter.Enabled = append(cfg.Profiles[0].Plugins.Filter.Enabled, schedapi.Plugin{Name: placementpolicy.Name})
+	cfg.Profiles[0].Plugins.PreScore.Enabled = append(cfg.Profiles[0].Plugins.PreScore.Enabled, schedapi.Plugin{Name: placementpolicy.Name})
 	cfg.Profiles[0].Plugins.Score.Enabled = append(cfg.Profiles[0].Plugins.Score.Enabled, schedapi.Plugin{Name: placementpolicy.Name})
 	cfg.Profiles[0].PluginConfig = append(cfg.Profiles[0].PluginConfig, schedapi.PluginConfig{
 		Name: placementpolicy.Name,

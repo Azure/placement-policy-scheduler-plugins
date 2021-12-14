@@ -195,7 +195,13 @@ data:
     profiles:
     - schedulerName: placement-policy-plugins-scheduler
       plugins:
+        preScore:
+          enabled:
+          - name: placementpolicy
         score:
+          enabled:
+          - name: placementpolicy
+        preFilter:
           enabled:
           - name: placementpolicy
         filter:

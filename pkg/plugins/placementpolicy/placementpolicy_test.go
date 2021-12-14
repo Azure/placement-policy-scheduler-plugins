@@ -14,41 +14,31 @@ import (
 func TestGroupNodesWithLabels(t *testing.T) {
 	tests := []struct {
 		name     string
-		nodeList func() []*framework.NodeInfo
+		nodeList []*corev1.Node
 		labels   map[string]string
 		want     func() map[string]*framework.NodeInfo
 	}{
 		{
 			name:     "no nodes",
-			nodeList: func() []*framework.NodeInfo { return []*framework.NodeInfo{} },
+			nodeList: []*corev1.Node{},
 			labels:   map[string]string{"foo": "bar"},
 			want:     func() map[string]*framework.NodeInfo { return map[string]*framework.NodeInfo{} },
 		},
 		{
 			name: "no matching nodes",
-			nodeList: func() []*framework.NodeInfo {
-				n1 := framework.NewNodeInfo()
-				n1.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1"}})
-
-				n2 := framework.NewNodeInfo()
-				n2.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node2"}})
-				return []*framework.NodeInfo{n1, n2}
+			nodeList: []*corev1.Node{
+				{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
 			},
 			labels: map[string]string{"foo": "bar"},
 			want:   func() map[string]*framework.NodeInfo { return map[string]*framework.NodeInfo{} },
 		},
 		{
 			name: "matching nodes found",
-			nodeList: func() []*framework.NodeInfo {
-				n1 := framework.NewNodeInfo()
-				n1.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}})
-
-				n2 := framework.NewNodeInfo()
-				n2.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node2"}})
-
-				n3 := framework.NewNodeInfo()
-				n3.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node3", Labels: map[string]string{"foo": "bar", "baz": "qux"}}})
-				return []*framework.NodeInfo{n1, n2, n3}
+			nodeList: []*corev1.Node{
+				{ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "node3", Labels: map[string]string{"foo": "bar", "baz": "qux"}}},
 			},
 			labels: map[string]string{"foo": "bar"},
 			want: func() map[string]*framework.NodeInfo {
@@ -68,13 +58,13 @@ func TestGroupNodesWithLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := groupNodesWithLabels(tt.nodeList(), tt.labels)
+			got := groupNodesWithLabels(tt.nodeList, tt.labels)
 			if len(got) != len(tt.want()) {
-				t.Errorf("groupNodesWithLabels(%v, %v) = %v, want %v", tt.nodeList(), tt.labels, got, tt.want())
+				t.Errorf("groupNodesWithLabels(%v, %v) = %v, want %v", tt.nodeList, tt.labels, got, tt.want())
 			}
 			for k := range tt.want() {
 				if _, ok := got[k]; !ok {
-					t.Errorf("groupNodesWithLabels(%v, %v) = %v, want %v", tt.nodeList(), tt.labels, got, tt.want())
+					t.Errorf("groupNodesWithLabels(%v, %v) = %v, want %v", tt.nodeList, tt.labels, got, tt.want())
 				}
 			}
 		})
@@ -86,28 +76,24 @@ func TestGroupPodsBasedOnNodePreference(t *testing.T) {
 		name                   string
 		podList                []*corev1.Pod
 		pod                    *corev1.Pod
-		nodeWithMatchingLabels func() map[string]*framework.NodeInfo
+		nodeWithMatchingLabels map[string]*corev1.Node
 		want                   []*corev1.Pod
 	}{
 		{
-			name:    "no pods",
-			podList: []*corev1.Pod{},
-			pod:     &corev1.Pod{},
-			nodeWithMatchingLabels: func() map[string]*framework.NodeInfo {
-				return map[string]*framework.NodeInfo{}
-			},
-			want: []*corev1.Pod{},
+			name:                   "no pods",
+			podList:                []*corev1.Pod{},
+			pod:                    &corev1.Pod{},
+			nodeWithMatchingLabels: map[string]*corev1.Node{},
+			want:                   []*corev1.Pod{},
 		},
 		{
 			name: "skip current pod",
 			podList: []*corev1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}},
 			},
-			pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}},
-			nodeWithMatchingLabels: func() map[string]*framework.NodeInfo {
-				return map[string]*framework.NodeInfo{}
-			},
-			want: []*corev1.Pod{},
+			pod:                    &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}},
+			nodeWithMatchingLabels: map[string]*corev1.Node{},
+			want:                   []*corev1.Pod{},
 		},
 		{
 			name: "pod with node name exists",
@@ -116,10 +102,8 @@ func TestGroupPodsBasedOnNodePreference(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", UID: types.UID("pod2")}, Spec: corev1.PodSpec{NodeName: "node1"}},
 			},
 			pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}},
-			nodeWithMatchingLabels: func() map[string]*framework.NodeInfo {
-				n1 := framework.NewNodeInfo()
-				n1.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}})
-				return map[string]*framework.NodeInfo{"node1": n1}
+			nodeWithMatchingLabels: map[string]*corev1.Node{
+				"node1": {ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}},
 			},
 			want: []*corev1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", UID: types.UID("pod2")}, Spec: corev1.PodSpec{NodeName: "node1"}},
@@ -132,10 +116,8 @@ func TestGroupPodsBasedOnNodePreference(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", UID: types.UID("pod2")}},
 			},
 			pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}},
-			nodeWithMatchingLabels: func() map[string]*framework.NodeInfo {
-				n1 := framework.NewNodeInfo()
-				n1.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}})
-				return map[string]*framework.NodeInfo{"node1": n1}
+			nodeWithMatchingLabels: map[string]*corev1.Node{
+				"node1": {ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}},
 			},
 			want: []*corev1.Pod{},
 		},
@@ -146,10 +128,8 @@ func TestGroupPodsBasedOnNodePreference(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", UID: types.UID("pod2"), Annotations: map[string]string{v1alpha1.PlacementPolicyPreferenceAnnotationKey: "true"}}},
 			},
 			pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}},
-			nodeWithMatchingLabels: func() map[string]*framework.NodeInfo {
-				n1 := framework.NewNodeInfo()
-				n1.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}})
-				return map[string]*framework.NodeInfo{"node1": n1}
+			nodeWithMatchingLabels: map[string]*corev1.Node{
+				"node1": {ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}},
 			},
 			want: []*corev1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", UID: types.UID("pod2"), Annotations: map[string]string{v1alpha1.PlacementPolicyPreferenceAnnotationKey: "true"}}},
@@ -162,10 +142,8 @@ func TestGroupPodsBasedOnNodePreference(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "pod2", UID: types.UID("pod2"), Annotations: map[string]string{v1alpha1.PlacementPolicyPreferenceAnnotationKey: "false"}}},
 			},
 			pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}},
-			nodeWithMatchingLabels: func() map[string]*framework.NodeInfo {
-				n1 := framework.NewNodeInfo()
-				n1.SetNode(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}})
-				return map[string]*framework.NodeInfo{"node1": n1}
+			nodeWithMatchingLabels: map[string]*corev1.Node{
+				"node1": {ObjectMeta: metav1.ObjectMeta{Name: "node1", Labels: map[string]string{"foo": "bar"}}},
 			},
 			want: []*corev1.Pod{},
 		},
@@ -173,12 +151,12 @@ func TestGroupPodsBasedOnNodePreference(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := groupPodsBasedOnNodePreference(tt.podList, tt.pod, tt.nodeWithMatchingLabels())
+			got := groupPodsBasedOnNodePreference(tt.podList, tt.pod, tt.nodeWithMatchingLabels)
 			if len(got) != len(tt.want) {
-				t.Errorf("groupPodsBasedOnNodePreference(%v, %v, %v) = %v, want %v", tt.podList, tt.pod, tt.nodeWithMatchingLabels(), got, tt.want)
+				t.Errorf("groupPodsBasedOnNodePreference(%v, %v, %v) = %v, want %v", tt.podList, tt.pod, tt.nodeWithMatchingLabels, got, tt.want)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("groupPodsBasedOnNodePreference(%v, %v, %v) = %v, want %v", tt.podList, tt.pod, tt.nodeWithMatchingLabels(), got, tt.want)
+				t.Errorf("groupPodsBasedOnNodePreference(%v, %v, %v) = %v, want %v", tt.podList, tt.pod, tt.nodeWithMatchingLabels, got, tt.want)
 			}
 		})
 	}
