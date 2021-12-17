@@ -4,7 +4,7 @@ metadata:
   name: pp-one
 spec:
   weight: 100
-  enforcementMode: BestEffort #Strict
+  enforcementMode: Strict
   podSelector:
     matchLabels:
       app: nginx
@@ -13,4 +13,4 @@ spec:
       node: want
   policy:
     action: Must
-    targetSize: 70%
+    targetSize: 40%
