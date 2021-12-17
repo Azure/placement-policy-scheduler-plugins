@@ -36,7 +36,7 @@ func TestAssignDifferentDeployments(t *testing.T) {
 				klog.ErrorS(err, "Failed to resource file")
 				return ctx
 			}
-			if err := KubectlApply(cfg.KubeconfigFile(), cfg.Namespace(), []string{"-f", filepath.Join(exampleResourceAbsolutePath, "v1alpha_placementpolicy.yml")}); err != nil {
+			if err := KubectlApply(cfg.KubeconfigFile(), cfg.Namespace(), []string{"-f", filepath.Join(exampleResourceAbsolutePath, "v1alpha1_placementpolicy.yml")}); err != nil {
 				klog.ErrorS(err, "Failed to deploy the placement policy scheduler config")
 				return ctx
 			}

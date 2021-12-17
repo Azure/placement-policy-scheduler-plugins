@@ -11,6 +11,7 @@ import (
 	ppclientset "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/clientset/versioned"
 	ppinformers "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/informers/externalversions"
 	"github.com/Azure/placement-policy-scheduler-plugins/pkg/plugins/placementpolicy/core"
+	"github.com/Azure/placement-policy-scheduler-plugins/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -178,7 +179,7 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 	node := nodeInfo.Node()
 	// nodeMatchesLabels is set to true if the node in the current context matches the node selector labels
 	// defined in the placement policy chosen for the pod.
-	nodeMatchesLabels := checkHasLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
+	nodeMatchesLabels := utils.HasMatchingLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
 
 	// podNodePreferMatchingLabels is set to true if the pod is annotated to be on the node with matching labels
 	podNodePreferMatchingLabels := false
@@ -275,7 +276,7 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	node := nodeInfo.Node()
 	// nodeMatchesLabels is set to true if the node in the current context matches the node selector labels
 	// defined in the placement policy chosen for the pod.
-	nodeMatchesLabels := checkHasLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
+	nodeMatchesLabels := utils.HasMatchingLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
 
 	// podNodePreferMatchingLabels is set to true if the pod is annotated to be on the node with matching labels
 	podNodePreferMatchingLabels := false
@@ -334,27 +335,13 @@ func (p *Plugin) getPreScoreStateKey() framework.StateKey {
 	return framework.StateKey(fmt.Sprintf("Prescore-%v", p.Name()))
 }
 
-// checkHasLabels checks if the labels exist in the provided set
-func checkHasLabels(l, wantLabels map[string]string) bool {
-	if len(l) < len(wantLabels) {
-		return false
-	}
-
-	for k, v := range wantLabels {
-		if l[k] != v {
-			return false
-		}
-	}
-	return true
-}
-
 // groupNodesWithLabels groups all nodes that match the node labels defined in the placement policy
 func groupNodesWithLabels(nodeList []*corev1.Node, labels map[string]string) map[string]*corev1.Node {
 	// nodeWithMatchingLabels is a group of nodes that have the same labels as defined in the placement policy
 	nodeWithMatchingLabels := make(map[string]*corev1.Node)
 
 	for _, node := range nodeList {
-		if checkHasLabels(node.Labels, labels) {
+		if utils.HasMatchingLabels(node.Labels, labels) {
 			nodeWithMatchingLabels[node.Name] = node
 			continue
 		}

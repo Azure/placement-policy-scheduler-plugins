@@ -8,6 +8,7 @@ import (
 	ppclientset "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/clientset/versioned"
 	ppinformers "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/informers/externalversions/apis/v1alpha1"
 	pplisters "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/listers/apis/v1alpha1"
+	"github.com/Azure/placement-policy-scheduler-plugins/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -101,18 +102,9 @@ func (m *PlacementPolicyManager) filterPlacementPolicyList(ppList []*v1alpha1.Pl
 	var filteredPPList []*v1alpha1.PlacementPolicy
 	for _, pp := range ppList {
 		labels := pp.Spec.PodSelector.MatchLabels
-		if checkMatchingLabels(pod.Labels, labels) {
+		if utils.HasMatchingLabels(pod.Labels, labels) {
 			filteredPPList = append(filteredPPList, pp)
 		}
 	}
 	return filteredPPList
-}
-
-func checkMatchingLabels(podLabels map[string]string, ppLabels map[string]string) bool {
-	for k, v := range ppLabels {
-		if podLabels[k] != v {
-			return false
-		}
-	}
-	return true
 }
