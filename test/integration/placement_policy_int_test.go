@@ -21,6 +21,7 @@ import (
 	"k8s.io/klog/v2"
 	apiservertesting "k8s.io/kubernetes/cmd/kube-apiserver/app/testing"
 	"k8s.io/kubernetes/pkg/scheduler"
+
 	schedapi "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	fwkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
@@ -39,13 +40,17 @@ func TestPlacementPolicyPlugins(t *testing.T) {
 		[]string{"--disable-admission-plugins=ServiceAccount,TaintNodesByCondition,Priority", "--runtime-config=api/all=true"},
 		testfwk.SharedEtcd(),
 	)
-	testCtx := &testutil.TestContext{}
-	testCtx.Ctx, testCtx.CancelFn = context.WithCancel(context.Background())
-	testCtx.CloseFn = func() { server.TearDownFn() }
+
+	todo := context.TODO()
+	ctx, cancelFunc := context.WithCancel(todo)
+	testCtx := &testutil.TestContext{
+		Ctx:      ctx,
+		CancelFn: cancelFunc,
+		CloseFn:  func() {},
+	}
 
 	t.Log("Creating CRD...")
 	apiExtensionClient := apiextensionsclient.NewForConfigOrDie(server.ClientConfig)
-	ctx := testCtx.Ctx
 	if _, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, makePlacementPolicyCRD(), metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -81,29 +86,27 @@ func TestPlacementPolicyPlugins(t *testing.T) {
 	cfg.Profiles[0].Plugins.Filter.Enabled = append(cfg.Profiles[0].Plugins.Filter.Enabled, schedapi.Plugin{Name: placementpolicy.Name})
 	cfg.Profiles[0].Plugins.PreScore.Enabled = append(cfg.Profiles[0].Plugins.PreScore.Enabled, schedapi.Plugin{Name: placementpolicy.Name})
 	cfg.Profiles[0].Plugins.Score.Enabled = append(cfg.Profiles[0].Plugins.Score.Enabled, schedapi.Plugin{Name: placementpolicy.Name})
-	cfg.Profiles[0].PluginConfig = append(cfg.Profiles[0].PluginConfig, schedapi.PluginConfig{
-		Name: placementpolicy.Name,
-		Args: &v1alpha1.PlacementPolicy{},
-	})
-	ns, err := cs.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{GenerateName: "integration-test-"}}, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		t.Fatalf("Failed to create integration test ns: %v", err)
-	}
 
 	testCtx = InitTestSchedulerWithOptions(
 		t,
 		testCtx,
 		true,
+		scheduler.WithKubeConfig(server.ClientConfig),
 		scheduler.WithProfiles(cfg.Profiles...),
 		scheduler.WithFrameworkOutOfTreeRegistry(fwkruntime.Registry{placementpolicy.Name: placementpolicy.New}),
 	)
 	t.Log("Init scheduler success")
 	defer testutil.CleanupTest(t, testCtx)
 
+	ns, err := cs.CoreV1().Namespaces().Create(testCtx.Ctx, &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "integration-test-"}}, metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		t.Fatalf("Failed to create integration test ns: %v", err)
+	}
+
 	// Create a Node.
 	nodeName := "fake-node"
-	node := st.MakeNode().Name("fake-node").Label("node", nodeName).Obj()
+	node := st.MakeNode().Name("fake-node").Label("node", "want").Obj()
 	node.Status.Allocatable = v1.ResourceList{
 		v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
 		v1.ResourceMemory: *resource.NewQuantity(300, resource.DecimalSI),
@@ -150,17 +153,17 @@ func TestPlacementPolicyPlugins(t *testing.T) {
 					t.Fatalf("Failed to create Pod %q: %v", pp.pods[i].Name, err)
 				}
 			}
-			// err = wait.Poll(1*time.Second, 120*time.Second, func() (bool, error) {
-			// 	for _, v := range pp.expectedPods {
-			// 		if !PodScheduled(cs, ns.Name, v) {
-			// 			return false, nil
-			// 		}
-			// 	}
-			// 	return true, nil
-			// })
-			// if err != nil {
-			// 	t.Fatalf("%v Waiting expectedPods error: %v", pp.name, err.Error())
-			// }
+			err = wait.Poll(1*time.Second, 120*time.Second, func() (bool, error) {
+				for _, v := range pp.expectedPods {
+					if !PodScheduled(cs, ns.Name, v) {
+						return false, nil
+					}
+				}
+				return true, nil
+			})
+			if err != nil {
+				t.Fatalf("%v Waiting expectedPods error: %v", pp.name, err.Error())
+			}
 			t.Logf("Case %v finished", pp.name)
 		})
 	}
@@ -186,6 +189,7 @@ func makePlacementPolicyCRD() *apiextensionsv1.CustomResourceDefinition {
 func WithContainer(pod *v1.Pod, image string) *v1.Pod {
 	pod.Spec.Containers[0].Name = "con0"
 	pod.Spec.Containers[0].Image = image
+	pod.SetLabels(PodSelectorLabels)
 	return pod
 }
 

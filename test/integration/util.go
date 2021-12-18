@@ -13,6 +13,11 @@ import (
 	schdscheme "k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
 )
 
+var (
+	NodeSelectorLabels = map[string]string{"node": "want"}
+	PodSelectorLabels  = map[string]string{"app": "nginx"}
+)
+
 // PodScheduled returns true if a node is assigned to the given pod.
 func PodScheduled(c kubernetes.Interface, podNamespace, podName string) bool {
 	pod, err := c.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
@@ -26,16 +31,20 @@ func PodScheduled(c kubernetes.Interface, podNamespace, podName string) bool {
 
 // MakePlacementPolicy
 func MakePlacementPolicy(name, namespace string) *v1alpha1.PlacementPolicy {
-	var targetSize intstr.IntOrString = intstr.FromString("40%")
+	targetSize := intstr.FromString("40%")
 
 	return &v1alpha1.PlacementPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.PlacementPolicySpec{
 			Weight:          100,
 			EnforcementMode: v1alpha1.EnforcementModeStrict,
-			PodSelector:     &metav1.LabelSelector{},
-			NodeSelector:    &metav1.LabelSelector{},
-			Policy:          &v1alpha1.Policy{Action: v1alpha1.ActionMust, TargetSize: &targetSize},
+			PodSelector: &metav1.LabelSelector{
+				MatchLabels: PodSelectorLabels,
+			},
+			NodeSelector: &metav1.LabelSelector{
+				MatchLabels: NodeSelectorLabels,
+			},
+			Policy: &v1alpha1.Policy{Action: v1alpha1.ActionMust, TargetSize: &targetSize},
 		},
 		Status: v1alpha1.PlacementPolicyStatus{},
 	}

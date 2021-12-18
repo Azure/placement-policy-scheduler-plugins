@@ -11,13 +11,11 @@ import (
 	ppclientset "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/clientset/versioned"
 	ppinformers "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/informers/externalversions"
 	"github.com/Azure/placement-policy-scheduler-plugins/pkg/plugins/placementpolicy/core"
-	"github.com/Azure/placement-policy-scheduler-plugins/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
@@ -43,13 +41,9 @@ var _ framework.ScorePlugin = &Plugin{}
 
 // New initializes and returns a new PlacementPolicy plugin.
 func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, err
-	}
 
-	client := kubernetes.NewForConfigOrDie(cfg)
-	ppClient := ppclientset.NewForConfigOrDie(cfg)
+	client := kubernetes.NewForConfigOrDie(handle.KubeConfig())
+	ppClient := ppclientset.NewForConfigOrDie(handle.KubeConfig())
 	ppInformerFactory := ppinformers.NewSharedInformerFactory(ppClient, 0)
 	ppInformer := ppInformerFactory.Placementpolicy().V1alpha1().PlacementPolicies()
 
@@ -148,7 +142,7 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 	}
 
 	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, pp))
-	return framework.NewStatus(framework.Success, "")
+	return nil
 }
 
 // PreFilterExtensions returns a PreFilterExtensions interface if the plugin implements one.
@@ -167,7 +161,7 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 		// if there is no data in state for the pod, then we should skip filter plugin
 		// as there could be no placement policy for the pod
 		if err == framework.ErrNotFound {
-			return framework.NewStatus(framework.Success, "")
+			return nil
 		}
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
 	}
@@ -179,7 +173,7 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 	node := nodeInfo.Node()
 	// nodeMatchesLabels is set to true if the node in the current context matches the node selector labels
 	// defined in the placement policy chosen for the pod.
-	nodeMatchesLabels := utils.HasMatchingLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
+	nodeMatchesLabels := checkHasLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
 
 	// podNodePreferMatchingLabels is set to true if the pod is annotated to be on the node with matching labels
 	podNodePreferMatchingLabels := false
@@ -190,7 +184,7 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
 	if nodeMatchesLabels && podNodePreferMatchingLabels ||
 		!nodeMatchesLabels && !podNodePreferMatchingLabels {
-		return framework.NewStatus(framework.Success, "")
+		return nil
 	}
 
 	klog.InfoS("filtering node", "node", node.Name, "pod", pod.Name)
@@ -211,7 +205,7 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 	}
 	// if placement policy enforcement mode is strict, then skip scoring
 	if pp.Spec.EnforcementMode == v1alpha1.EnforcementModeStrict {
-		return framework.NewStatus(framework.Success, "")
+		return nil
 	}
 
 	// nodeWithMatchingLabels is a group of nodes that have the same labels as defined in the placement policy
@@ -251,7 +245,7 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 	}
 
 	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, pp))
-	return framework.NewStatus(framework.Success, "")
+	return nil
 }
 
 // Score invoked at the score extension point.
@@ -261,7 +255,7 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 		// if there is no data in state for the pod, then we should skip score plugin
 		// as there could be no placement policy for the pod
 		if err == framework.ErrNotFound {
-			return 0, framework.NewStatus(framework.Success, "")
+			return 0, nil
 		}
 		return 0, framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
 	}
@@ -276,7 +270,7 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	node := nodeInfo.Node()
 	// nodeMatchesLabels is set to true if the node in the current context matches the node selector labels
 	// defined in the placement policy chosen for the pod.
-	nodeMatchesLabels := utils.HasMatchingLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
+	nodeMatchesLabels := checkHasLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
 
 	// podNodePreferMatchingLabels is set to true if the pod is annotated to be on the node with matching labels
 	podNodePreferMatchingLabels := false
@@ -287,10 +281,10 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
 	if nodeMatchesLabels && podNodePreferMatchingLabels ||
 		!nodeMatchesLabels && !podNodePreferMatchingLabels {
-		return 100, framework.NewStatus(framework.Success, "")
+		return 100, nil
 	}
 
-	return 0, framework.NewStatus(framework.Success, "")
+	return 0, nil
 }
 
 // ScoreExtensions of the Score plugin.
@@ -324,7 +318,7 @@ func (p *Plugin) NormalizeScore(ctx context.Context, state *framework.CycleState
 	}
 
 	klog.InfoS("normalized scores", "pod", pod.Name, "scores", scores)
-	return framework.NewStatus(framework.Success, "")
+	return nil
 }
 
 func (p *Plugin) getPreFilterStateKey() framework.StateKey {
@@ -335,13 +329,27 @@ func (p *Plugin) getPreScoreStateKey() framework.StateKey {
 	return framework.StateKey(fmt.Sprintf("Prescore-%v", p.Name()))
 }
 
+// checkHasLabels checks if the labels exist in the provided set
+func checkHasLabels(l, wantLabels map[string]string) bool {
+	if len(l) < len(wantLabels) {
+		return false
+	}
+
+	for k, v := range wantLabels {
+		if l[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
 // groupNodesWithLabels groups all nodes that match the node labels defined in the placement policy
 func groupNodesWithLabels(nodeList []*corev1.Node, labels map[string]string) map[string]*corev1.Node {
 	// nodeWithMatchingLabels is a group of nodes that have the same labels as defined in the placement policy
 	nodeWithMatchingLabels := make(map[string]*corev1.Node)
 
 	for _, node := range nodeList {
-		if utils.HasMatchingLabels(node.Labels, labels) {
+		if checkHasLabels(node.Labels, labels) {
 			nodeWithMatchingLabels[node.Name] = node
 			continue
 		}
@@ -391,9 +399,4 @@ func groupPodsBasedOnNodePreference(podList []*corev1.Pod, pod *corev1.Pod, node
 	}
 
 	return podsOnNodeWithMatchingLabels
-}
-
-// Less is used to sort pods in the scheduling queue
-func (cs *Plugin) Less(podInfo1, podInfo2 *framework.QueuedPodInfo) bool {
-	return true
 }
