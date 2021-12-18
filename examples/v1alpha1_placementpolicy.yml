@@ -4,7 +4,7 @@ metadata:
   name: pp-one
 spec:
   weight: 100
-  enforcementMode: Strict #BestEffort
+  enforcementMode: Strict
   podSelector:
     matchLabels:
       app: nginx

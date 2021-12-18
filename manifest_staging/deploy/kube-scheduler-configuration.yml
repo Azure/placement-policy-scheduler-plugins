@@ -195,7 +195,13 @@ data:
     profiles:
     - schedulerName: placement-policy-plugins-scheduler
       plugins:
+        preScore:
+          enabled:
+          - name: placementpolicy
         score:
+          enabled:
+          - name: placementpolicy
+        preFilter:
           enabled:
           - name: placementpolicy
         filter:
@@ -307,7 +313,7 @@ spec:
         - --config=/etc/schedulerconfig/scheduler-config.yaml
         - --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
         - --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
-        image: helayoty/placement-policy:v0.1.0
+        image: aramase/placement-policy:v0.1.0
         name: pp-plugins-scheduler
         securityContext:
           privileged: true
