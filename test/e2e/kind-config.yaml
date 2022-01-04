@@ -16,3 +16,10 @@ nodes:
       nodeRegistration:
         kubeletExtraArgs:
           node-labels: "node=want"
+- role: worker
+  kubeadmConfigPatches:
+    - |
+      kind: JoinConfiguration
+      nodeRegistration:
+        kubeletExtraArgs:
+          node-labels: "node=unwant"

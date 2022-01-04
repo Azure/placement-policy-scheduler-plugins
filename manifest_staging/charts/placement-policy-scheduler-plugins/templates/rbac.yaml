@@ -63,15 +63,43 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: pp-plugins-scheduler
-roleRef:
+  name:  pp-plugins-scheduler
+subjects:
+- kind: User
+  name: system:kube-scheduler
+  namespace: {{ .Release.Namespace }}
   apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name:  pp-plugins-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pp-plugins-scheduler-as-kube-scheduler
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: pp-plugins-scheduler
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: extension-apiserver-authentication-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pp-plugins-scheduler-as-kube-scheduler
+subjects:
+  - kind: ServiceAccount
+    name: pp-plugins-scheduler
+    namespace: {{ .Release.Namespace }}
+roleRef:
   kind: ClusterRole
   name: pp-plugins-scheduler
-subjects:
-- kind: ServiceAccount
-  name: pp-plugins-scheduler
-  namespace: {{ .Release.Namespace }}
+  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1
 kind: ServiceAccount

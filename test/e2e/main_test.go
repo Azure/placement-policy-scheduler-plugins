@@ -36,44 +36,48 @@ func TestMain(m *testing.M) {
 	testenv.Setup(
 		envfuncs.CreateKindClusterWithConfig(kindClusterName, "kindest/node:v1.22.2", "kind-config.yaml"),
 		envfuncs.CreateNamespace(namespace),
-		func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
-			wd, err := os.Getwd()
-			if err != nil {
-				return ctx, err
-			}
-			providerResourceAbsolutePath, err := filepath.Abs(filepath.Join(wd, "/../../", providerResourceDirectory))
-			if err != nil {
-				return ctx, err
-			}
-			// start a CRD deployment
-			if err := KubectlApply(cfg.KubeconfigFile(), "kube-system", []string{"-f", fmt.Sprintf("%s/%s", providerResourceAbsolutePath, providerResource)}); err != nil {
-				klog.ErrorS(err, "Failed to install placement policy scheduler CRD")
-			}
-			// wait for the deployment to finish becoming available
-			dep := appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "pp-plugins-scheduler", Namespace: "kube-system"},
-			}
-
-			client, err := cfg.NewClient()
-			if err != nil {
-				klog.ErrorS(err, "Failed to create new Client")
-			}
-
-			err = wait.For(conditions.New(client.Resources()).ResourceMatch(&dep, func(object k8s.Object) bool {
-				d := object.(*appsv1.Deployment)
-				return float64(d.Status.ReadyReplicas)/float64(*d.Spec.Replicas) >= 1
-			}), wait.WithTimeout(time.Minute*1))
-
-			if err != nil {
-				klog.ErrorS(err, "Failed to deploy placement policy scheduler")
-			}
-
-			return ctx, nil
-		},
+		deploySchedulerManifest(),
 	).Finish( // Cleanup KinD Cluster
 		envfuncs.DeleteNamespace(namespace),
 		envfuncs.DestroyKindCluster(kindClusterName),
 	)
-
 	os.Exit(testenv.Run(m))
+}
+
+func deploySchedulerManifest() env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		wd, err := os.Getwd()
+		if err != nil {
+			return ctx, err
+		}
+		providerResourceAbsolutePath, err := filepath.Abs(filepath.Join(wd, "/../../", providerResourceDirectory))
+		if err != nil {
+			return ctx, err
+		}
+		// start a CRD deployment
+		if err := KubectlApply(cfg.KubeconfigFile(), "kube-system", []string{"-f", fmt.Sprintf("%s/%s", providerResourceAbsolutePath, providerResource)}); err != nil {
+			return ctx, err
+		}
+		// wait for the deployment to finish becoming available
+		dep := appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "pp-plugins-scheduler", Namespace: "kube-system"},
+		}
+
+		client, err := cfg.NewClient()
+		if err != nil {
+			klog.ErrorS(err, "Failed to create new Client")
+			return ctx, err
+		}
+
+		if err := wait.For(conditions.New(client.Resources()).ResourceMatch(&dep, func(object k8s.Object) bool {
+			d := object.(*appsv1.Deployment)
+			return float64(d.Status.ReadyReplicas)/float64(*d.Spec.Replicas) >= 1
+		}), wait.WithTimeout(time.Minute*1)); err != nil {
+
+			klog.ErrorS(err, " Failed to deploy placement policy scheduler")
+			return ctx, err
+		}
+
+		return ctx, nil
+	}
 }
