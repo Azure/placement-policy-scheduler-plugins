@@ -89,12 +89,12 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 	// no placement policy that matches pod, then we skip filter plugin
 	if pp == nil {
 		klog.InfoS("no placement policy found for pod", "pod", pod.Name)
-		return nil
+		return framework.NewStatus(framework.Success, "")
 	}
 	// skip filtering if the enforcement mode is best effort
 	// only filter if the enforcement mode is strict
 	if pp.Spec.EnforcementMode == v1alpha1.EnforcementModeBestEffort {
-		return nil
+		return framework.NewStatus(framework.Success, "")
 	}
 	nodeInfoList, err := p.frameworkHandler.SnapshotSharedLister().NodeInfos().List()
 	if err != nil {
@@ -142,11 +142,11 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 	}
 
 	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, pp))
-	return nil
+	return framework.NewStatus(framework.Success, "")
 }
 
 // PreFilterExtensions returns a PreFilterExtensions interface if the plugin implements one.
-func (cs *Plugin) PreFilterExtensions() framework.PreFilterExtensions {
+func (p *Plugin) PreFilterExtensions() framework.PreFilterExtensions {
 	return nil
 }
 
@@ -161,7 +161,7 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 		// if there is no data in state for the pod, then we should skip filter plugin
 		// as there could be no placement policy for the pod
 		if err == framework.ErrNotFound {
-			return nil
+			return framework.NewStatus(framework.Success, "")
 		}
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
 	}
@@ -184,7 +184,7 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
 	if nodeMatchesLabels && podNodePreferMatchingLabels ||
 		!nodeMatchesLabels && !podNodePreferMatchingLabels {
-		return nil
+		return framework.NewStatus(framework.Success, "")
 	}
 
 	klog.InfoS("filtering node", "node", node.Name, "pod", pod.Name)
@@ -203,9 +203,13 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 	if err != nil {
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to get placement policy for pod %s: %v", pod.Name, err))
 	}
+	if pp == nil {
+		klog.InfoS("no placement policy found for pod", "pod", pod.Name)
+		return framework.NewStatus(framework.Success, "")
+	}
 	// if placement policy enforcement mode is strict, then skip scoring
 	if pp.Spec.EnforcementMode == v1alpha1.EnforcementModeStrict {
-		return nil
+		return framework.NewStatus(framework.Success, "")
 	}
 
 	// nodeWithMatchingLabels is a group of nodes that have the same labels as defined in the placement policy
@@ -245,7 +249,7 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 	}
 
 	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, pp))
-	return nil
+	return framework.NewStatus(framework.Success, "")
 }
 
 // Score invoked at the score extension point.
@@ -318,7 +322,7 @@ func (p *Plugin) NormalizeScore(ctx context.Context, state *framework.CycleState
 	}
 
 	klog.InfoS("normalized scores", "pod", pod.Name, "scores", scores)
-	return nil
+	return framework.NewStatus(framework.Success, "")
 }
 
 func (p *Plugin) getPreFilterStateKey() framework.StateKey {
