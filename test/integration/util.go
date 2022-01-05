@@ -30,21 +30,20 @@ func PodScheduled(c kubernetes.Interface, podNamespace, podName string) bool {
 }
 
 // MakePlacementPolicy
-func MakePlacementPolicy(name, namespace string) *v1alpha1.PlacementPolicy {
-	targetSize := intstr.FromString("40%")
+func MakePlacementPolicy(mode v1alpha1.EnforcementMode, targetSize intstr.IntOrString, action v1alpha1.Action, name, namespace string) *v1alpha1.PlacementPolicy {
 
 	return &v1alpha1.PlacementPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.PlacementPolicySpec{
 			Weight:          100,
-			EnforcementMode: v1alpha1.EnforcementModeStrict,
+			EnforcementMode: mode,
 			PodSelector: &metav1.LabelSelector{
 				MatchLabels: PodSelectorLabels,
 			},
 			NodeSelector: &metav1.LabelSelector{
 				MatchLabels: NodeSelectorLabels,
 			},
-			Policy: &v1alpha1.Policy{Action: v1alpha1.ActionMust, TargetSize: &targetSize},
+			Policy: &v1alpha1.Policy{Action: action, TargetSize: &targetSize},
 		},
 		Status: v1alpha1.PlacementPolicyStatus{},
 	}

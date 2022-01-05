@@ -14,8 +14,8 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -29,6 +29,12 @@ import (
 	testutil "k8s.io/kubernetes/test/integration/util"
 	imageutils "k8s.io/kubernetes/test/utils/image"
 	"sigs.k8s.io/yaml"
+)
+
+const (
+	node1 = "fake-node-1"
+	node2 = "fake-node-2"
+	node3 = "fake-node-3"
 )
 
 func TestPlacementPolicyPlugins(t *testing.T) {
@@ -104,38 +110,56 @@ func TestPlacementPolicyPlugins(t *testing.T) {
 		t.Fatalf("Failed to create integration test ns: %v", err)
 	}
 
-	// Create a Node.
-	nodeName := "fake-node"
-	node := st.MakeNode().Name("fake-node").Label("node", "want").Obj()
-	node.Status.Allocatable = v1.ResourceList{
-		v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
-		v1.ResourceMemory: *resource.NewQuantity(300, resource.DecimalSI),
+	// Create nodes.
+
+	for _, nodeName := range []string{node1, node2} {
+		newNode := st.MakeNode().Name(nodeName).Label("node", "want").Obj()
+		n, err := cs.CoreV1().Nodes().Create(ctx, newNode, metav1.CreateOptions{})
+		if err != nil {
+			t.Fatalf("Failed to create Node %q: %v", nodeName, err)
+		}
+		t.Logf(" Node %s created: %v", nodeName, n)
 	}
-	node.Status.Capacity = v1.ResourceList{
-		v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
-		v1.ResourceMemory: *resource.NewQuantity(300, resource.DecimalSI),
-	}
-	node, err = cs.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
+	unwantNode := st.MakeNode().Name(node3).Label("node", "unwant").Obj()
+	n, err := cs.CoreV1().Nodes().Create(ctx, unwantNode, metav1.CreateOptions{})
 	if err != nil {
-		t.Fatalf("Failed to create Node %q: %v", nodeName, err)
+		t.Fatalf("Failed to create Node %q: %v", node3, err)
 	}
+	t.Logf(" Node %s created: %v", node3, n)
 
 	busyBox := imageutils.GetE2EImage(imageutils.BusyBox)
+
 	for _, pp := range []struct {
-		name         string
-		pods         []*v1.Pod
-		policy       *v1alpha1.PlacementPolicy
-		expectedPods []string
+		name          string
+		pods          []*v1.Pod
+		policy        *v1alpha1.PlacementPolicy
+		expectedNodes []string
 	}{
 		{
-			name: "Case of Placement Policy ActionMust",
+			name: "Case of Placement Policy StrictMust",
 			pods: []*v1.Pod{
-				WithContainer(st.MakePod().Namespace(ns.Name).Name("t1-policymust-1").Req(map[v1.ResourceName]string{v1.ResourceMemory: "50"}).Label("placement-policy.scheduling.x-k8s.io", "policyMust-1").ZeroTerminationGracePeriod().Obj(), busyBox),
-				WithContainer(st.MakePod().Namespace(ns.Name).Name("t1-policymust-2").Req(map[v1.ResourceName]string{v1.ResourceMemory: "50"}).Label("placement-policy.scheduling.x-k8s.io", "policyMust-2").ZeroTerminationGracePeriod().Obj(), busyBox),
-				WithContainer(st.MakePod().Namespace(ns.Name).Name("t1-policymust-3").Req(map[v1.ResourceName]string{v1.ResourceMemory: "50"}).Label("placement-policy.scheduling.x-k8s.io", "policyMust-3").ZeroTerminationGracePeriod().Obj(), busyBox),
+				st.MakePod().Namespace(ns.Name).Name("policymust-1").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-2").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-3").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-4").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-5").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-6").Label("app", "else").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
 			},
-			policy:       MakePlacementPolicy("policymust", ns.Name),
-			expectedPods: []string{"t1-policyMust-1"},
+			policy:        MakePlacementPolicy(v1alpha1.EnforcementModeStrict, intstr.FromString("80%"), v1alpha1.ActionMust, "strictmust", ns.Name),
+			expectedNodes: []string{node1, node2},
+		},
+		{
+			name: "Case of Placement Policy StrictMustnot",
+			pods: []*v1.Pod{
+				st.MakePod().Namespace(ns.Name).Name("policymust-1").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-2").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-3").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-4").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-5").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+				st.MakePod().Namespace(ns.Name).Name("policymust-6").Label("app", "else").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
+			},
+			policy:        MakePlacementPolicy(v1alpha1.EnforcementModeStrict, intstr.FromString("80%"), v1alpha1.ActionMustNot, "strictmustnot", ns.Name),
+			expectedNodes: []string{node3},
 		},
 	} {
 		t.Run(pp.name, func(t *testing.T) {
@@ -153,20 +177,63 @@ func TestPlacementPolicyPlugins(t *testing.T) {
 					t.Fatalf("Failed to create Pod %q: %v", pp.pods[i].Name, err)
 				}
 			}
-			// err = wait.Poll(1*time.Second, 120*time.Second, func() (bool, error) {
-			// 	for _, v := range pp.expectedPods {
-			// 		if !PodScheduled(cs, ns.Name, v) {
-			// 			return false, nil
-			// 		}
-			// 	}
-			// 	return true, nil
-			// })
-			// if err != nil {
-			// 	t.Fatalf("%v Waiting expectedPods error: %v", pp.name, err.Error())
-			// }
-			t.Logf("Case %v finished", pp.name)
+
+			targetCount := 0
+			for _, p := range pp.pods {
+				// Wait for the pod to be scheduled.
+				err = wait.Poll(1*time.Second, 20*time.Second, func() (bool, error) {
+					return PodScheduled(cs, ns.Name, p.Name), nil
+				})
+				if err != nil {
+					t.Errorf("pod %q to be scheduled, error: %v", p.Name, err)
+				}
+
+				t.Logf("pod scheduled: %v", p.Name)
+			}
+			podList, err := cs.CoreV1().Pods(ns.Name).List(testCtx.Ctx, metav1.ListOptions{LabelSelector: "app=nginx"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			targetSize, err := intstr.GetScaledValueFromIntOrPercent(pp.policy.Spec.Policy.TargetSize, len(podList.Items), false)
+			if err != nil {
+				t.Fatalf("failed to get scaled value from int or percent: %v", err)
+			}
+			for _, p := range podList.Items {
+				// The other pods should be scheduled on the other node.
+				nodeName, err := getNodeName(cs, ns.Name, p.Name)
+				if err != nil {
+					t.Log(err)
+				}
+				if contains(pp.expectedNodes, nodeName) {
+					targetCount++
+				}
+				if targetCount > targetSize {
+					t.Errorf("Pod %s is not assigned to the expected node(s)",
+						p.Name)
+				}
+
+			}
+			t.Logf("case %v finished", pp.name)
 		})
 	}
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+// getNodeName returns the name of the node if a node has assigned to the given pod
+func getNodeName(c kubernetes.Interface, podNamespace, podName string) (string, error) {
+	pod, err := c.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return pod.Spec.NodeName, nil
 }
 
 func makePlacementPolicyCRD() *apiextensionsv1.CustomResourceDefinition {
@@ -184,13 +251,6 @@ func makePlacementPolicyCRD() *apiextensionsv1.CustomResourceDefinition {
 	}
 
 	return placementPoliciesCRD
-}
-
-func WithContainer(pod *v1.Pod, image string) *v1.Pod {
-	pod.Spec.Containers[0].Name = "con0"
-	pod.Spec.Containers[0].Image = image
-	pod.SetLabels(PodSelectorLabels)
-	return pod
 }
 
 func createPlacementPolicy(ctx context.Context, client versioned.Interface, placementpolicy *v1alpha1.PlacementPolicy) error {

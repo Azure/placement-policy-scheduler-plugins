@@ -35,7 +35,7 @@ runTests() {
 
 # TODO try to use SCRIPT_ROOT for absolute path
   ln -s ../../../../../../../hack/testdata vendor/k8s.io/kubernetes/cmd/kube-apiserver/app/testing/testdata
-  go test ./... -mod=vendor -coverprofile cover.out
+  go test ./test/integration/... -mod=vendor -coverprofile cover.out
 
   cleanup
 }
