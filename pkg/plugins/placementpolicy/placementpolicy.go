@@ -59,6 +59,28 @@ func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) 
 		ppMgr:            ppMgr,
 	}
 
+	ppInformer.Informer().AddEventHandler(
+		cache.FilteringResourceEventHandler{
+			FilterFunc: func(obj interface{}) bool {
+				switch t := obj.(type) {
+				case *v1alpha1.PlacementPolicy:
+					return true
+				case cache.DeletedFinalStateUnknown:
+					if _, ok := t.Obj.(*v1alpha1.PlacementPolicy); ok {
+						return true
+					}
+					return false
+				default:
+					return false
+				}
+			},
+			Handler: cache.ResourceEventHandlerFuncs{
+				AddFunc:    plugin.AddPolicy,
+				UpdateFunc: plugin.UpdatePolicy,
+				DeleteFunc: plugin.RemovePolicy,
+			},
+		})
+
 	ctx := context.Background()
 	ppInformerFactory.Start(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), ppInformer.Informer().HasSynced) {
@@ -66,6 +88,29 @@ func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) 
 		klog.ErrorS(err, "Cannot sync caches")
 		return nil, err
 	}
+
+	podInformer := handle.SharedInformerFactory().Core().V1().Pods().Informer()
+	podInformer.AddEventHandler(
+		cache.FilteringResourceEventHandler{
+			FilterFunc: func(obj interface{}) bool {
+				switch t := obj.(type) {
+				case *corev1.Pod:
+					return assignedPod(t)
+				case cache.DeletedFinalStateUnknown:
+					if pod, ok := t.Obj.(*corev1.Pod); ok {
+						return assignedPod(pod)
+					}
+					return false
+				default:
+					return false
+				}
+			},
+			Handler: cache.ResourceEventHandlerFuncs{
+				UpdateFunc: plugin.UpdatePodPolicy,
+				DeleteFunc: plugin.RemovePodFromPolicy,
+			},
+		},
+	)
 
 	return plugin, nil
 }
@@ -403,4 +448,62 @@ func groupPodsBasedOnNodePreference(podList []*corev1.Pod, pod *corev1.Pod, node
 	}
 
 	return podsOnNodeWithMatchingLabels
+}
+
+// assignedPod selects pods that are assigned (scheduled and running).
+func assignedPod(pod *corev1.Pod) bool {
+	return len(pod.Spec.NodeName) != 0
+}
+
+func (p *Plugin) RemovePodFromPolicy(obj interface{}) {
+	pod := obj.(*corev1.Pod)
+
+	p.Lock()
+	defer p.Unlock()
+
+	p.ppMgr.RemovePodFromPolicy(pod)
+}
+
+func (p *Plugin) UpdatePodPolicy(old interface{}, new interface{}) {
+	oldPod := old.(*corev1.Pod)
+	newPod := new.(*corev1.Pod)
+
+	if oldPod.Status.Phase == corev1.PodSucceeded || oldPod.Status.Phase == corev1.PodFailed {
+		return
+	}
+
+	if newPod.Status.Phase != corev1.PodRunning && newPod.Status.Phase != corev1.PodPending {
+		p.Lock()
+		defer p.Unlock()
+
+		p.ppMgr.UpdatePodPolicy(oldPod, newPod)
+	}
+}
+
+func (p *Plugin) AddPolicy(obj interface{}) {
+	policy := obj.(*v1alpha1.PlacementPolicy)
+
+	p.Lock()
+	defer p.Unlock()
+
+	p.ppMgr.AddPolicy(policy)
+}
+
+func (p *Plugin) UpdatePolicy(old interface{}, new interface{}) {
+	oldPolicy := old.(*v1alpha1.PlacementPolicy)
+	newPolicy := new.(*v1alpha1.PlacementPolicy)
+
+	p.Lock()
+	defer p.Unlock()
+
+	p.ppMgr.UpdatePolicy(oldPolicy, newPolicy)
+}
+
+func (p *Plugin) RemovePolicy(obj interface{}) {
+	policy := obj.(*v1alpha1.PlacementPolicy)
+
+	p.Lock()
+	defer p.Unlock()
+
+	p.ppMgr.DeletePolicy(policy)
 }

@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type (
@@ -77,6 +78,13 @@ type Policy struct {
 type PlacementPolicyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	//All pods that would fall under this policy
+	AllQualifyingPods sets.String `json:"allQualifyingPods,omitempty"`
+	//Pods assigned to nodes based on this policy - those which are considered when computing "current size"
+	PodsManagedByPolicy sets.String `json:"podsManagedByPolicy,omitempty"`
+	//Computed whenever a pod is added or removed from the "managed by" list; Policy is "met" when this value is equal to target
+	CurrentSize *intstr.IntOrString `json:"currentSize,omitempty"`
 }
 
 //+kubebuilder:object:root=true
