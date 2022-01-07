@@ -11,9 +11,9 @@ import (
 	"github.com/Azure/placement-policy-scheduler-plugins/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
@@ -21,19 +21,15 @@ import (
 // Manager defines the interfaces for PlacementPolicy management.
 type Manager interface {
 	GetPlacementPolicyForPod(context.Context, *corev1.Pod) (*v1alpha1.PlacementPolicy, error)
-	GetPodsWithLabels(context.Context, map[string]string) ([]*corev1.Pod, error)
-	AnnotatePod(context.Context, *corev1.Pod, *v1alpha1.PlacementPolicy, bool) (*corev1.Pod, error)
-	GetPlacementPolicy(context.Context, string, string) (*v1alpha1.PlacementPolicy, error)
 	RemovePodFromPolicy(*corev1.Pod)
-	UpdatePodPolicy(*corev1.Pod, *corev1.Pod)
 	AddPolicy(*v1alpha1.PlacementPolicy)
 	UpdatePolicy(*v1alpha1.PlacementPolicy, *v1alpha1.PlacementPolicy)
 	DeletePolicy(*v1alpha1.PlacementPolicy)
+	CalculateTrueTargetSize(specTarget *intstr.IntOrString, lenAllPods int, action v1alpha1.Action) (int, error)
+	AddPodToPolicy(context.Context, *corev1.Pod, *v1alpha1.PlacementPolicy) (*v1alpha1.PlacementPolicy, error)
 }
 
 type PlacementPolicyManager struct {
-	// client is a clientset for the kube API server.
-	client kubernetes.Interface
 	// client is a placementPolicy client
 	ppClient ppclientset.Interface
 	// podLister is pod lister
@@ -53,13 +49,11 @@ func NewPlacementPolicies() PlacementPolicies {
 }
 
 func NewPlacementPolicyManager(
-	client kubernetes.Interface,
 	ppClient ppclientset.Interface,
 	snapshotSharedLister framework.SharedLister,
 	ppInformer ppinformers.PlacementPolicyInformer,
 	podLister corelisters.PodLister) *PlacementPolicyManager {
 	return &PlacementPolicyManager{
-		client:               client,
 		ppClient:             ppClient,
 		snapshotSharedLister: snapshotSharedLister,
 		ppLister:             ppInformer.Lister(),
@@ -108,6 +102,7 @@ func (m *PlacementPolicyManager) UpdatePolicy(oldPolicy *v1alpha1.PlacementPolic
 
 	_, namespaceExists := m.policies[namespace]
 
+	//todo more complex comparison logic and merging needed
 	if namespaceExists {
 		if nameUnchanged {
 			m.policies[namespace][oldName] = newPolicy
@@ -141,16 +136,13 @@ func (m *PlacementPolicyManager) GetPlacementPolicyForPod(ctx context.Context, p
 		}
 	}
 
-	var ppList []*v1alpha1.PlacementPolicy
-	for _, pp := range namespaceList {
-		ppList = append(ppList, pp)
-	}
-
 	// filter the placement policy list based on the pod's labels
-	ppList = m.filterPlacementPolicyList(ppList, pod)
+	ppList := m.filterPlacementPolicyList(namespaceList, pod)
+
 	if len(ppList) == 0 {
 		return nil, nil
 	}
+
 	if len(ppList) > 1 {
 		// if there are multiple placement policies, sort them by weight and return the first one
 		sort.Sort(sort.Reverse(ByWeight(ppList)))
@@ -176,32 +168,7 @@ func (m *PlacementPolicyManager) PopulateNamespacePolicies(namespace string) (ma
 	return result, nil
 }
 
-func (m *PlacementPolicyManager) GetPodsWithLabels(ctx context.Context, podLabels map[string]string) ([]*corev1.Pod, error) {
-	return m.podLister.List(labels.Set(podLabels).AsSelector())
-}
-
-// AnnotatePod annotates the pod with the placement policy.
-func (m *PlacementPolicyManager) AnnotatePod(ctx context.Context, pod *corev1.Pod, pp *v1alpha1.PlacementPolicy, preferredNodeWithMatchingLabels bool) (*corev1.Pod, error) {
-	annotations := map[string]string{}
-	if pod.Annotations != nil {
-		annotations = pod.Annotations
-	}
-
-	preference := "false"
-	if preferredNodeWithMatchingLabels {
-		preference = "true"
-	}
-	annotations[v1alpha1.PlacementPolicyAnnotationKey] = pp.Name
-	annotations[v1alpha1.PlacementPolicyPreferenceAnnotationKey] = preference
-	pod.Annotations = annotations
-	return m.client.CoreV1().Pods(pod.Namespace).Update(ctx, pod, metav1.UpdateOptions{})
-}
-
-func (m *PlacementPolicyManager) GetPlacementPolicy(ctx context.Context, namespace, name string) (*v1alpha1.PlacementPolicy, error) {
-	return m.ppLister.PlacementPolicies(namespace).Get(name)
-}
-
-func (m *PlacementPolicyManager) filterPlacementPolicyList(ppList []*v1alpha1.PlacementPolicy, pod *corev1.Pod) []*v1alpha1.PlacementPolicy {
+func (m *PlacementPolicyManager) filterPlacementPolicyList(ppList map[string]*v1alpha1.PlacementPolicy, pod *corev1.Pod) []*v1alpha1.PlacementPolicy {
 	var filteredPPList []*v1alpha1.PlacementPolicy
 	for _, pp := range ppList {
 		labels := pp.Spec.PodSelector.MatchLabels
@@ -228,18 +195,29 @@ func (m *PlacementPolicyManager) RemovePodFromPolicy(pod *corev1.Pod) {
 
 		associated := getAssociatedPolicy(ppArray, key)
 		if associated != nil {
-			status := associated.Status
-			impacts := status.PodsManagedByPolicy.Has(key)
-			if impacts {
-				//re-compute size
+			policyNamespace := associated.Namespace
+			policyName := associated.Name
 
+			status := associated.Status
+			act := associated.Spec.Policy.Action
+
+			delete(status.AllQualifyingPods, key)
+			podCount := len(status.AllQualifyingPods)
+
+			delete(status.PodsManagedByPolicy, key)
+
+			target, calcError := m.CalculateTrueTargetSize(associated.Spec.Policy.TargetSize, podCount, act)
+
+			targetMet := status.TargetMet
+			if calcError == nil {
+				managedCount := len(status.PodsManagedByPolicy)
+				targetMet = managedCount < target
 			}
+
+			updatedStatus := m.buildStatus(status.AllQualifyingPods, status.PodsManagedByPolicy, targetMet)
+			m.updateLocalPolicy(policyNamespace, policyName, *updatedStatus)
 		}
 	}
-}
-
-func (m *PlacementPolicyManager) UpdatePodPolicy(old *corev1.Pod, new *corev1.Pod) {
-
 }
 
 func getAssociatedPolicy(ppList []*v1alpha1.PlacementPolicy, key string) *v1alpha1.PlacementPolicy {
@@ -253,4 +231,70 @@ func getAssociatedPolicy(ppList []*v1alpha1.PlacementPolicy, key string) *v1alph
 		}
 	}
 	return matchingPolicy
+}
+
+func (m *PlacementPolicyManager) CalculateTrueTargetSize(specTarget *intstr.IntOrString, lenAllPods int, action v1alpha1.Action) (int, error) {
+	target, err := intstr.GetScaledValueFromIntOrPercent(specTarget, lenAllPods, false)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if action == v1alpha1.ActionMustNot {
+		target = lenAllPods - target
+	}
+
+	return target, nil
+}
+
+func (m *PlacementPolicyManager) AddPodToPolicy(ctx context.Context, pod *corev1.Pod, pp *v1alpha1.PlacementPolicy) (*v1alpha1.PlacementPolicy, error) {
+	podKey, err := framework.GetPodKey(pod)
+	if err != nil {
+		return pp, err
+	}
+
+	policyNamespace := pp.Namespace
+	policyName := pp.Name
+
+	specTarget := pp.Spec.Policy.TargetSize
+
+	ppState := pp.Status
+
+	allPods := ppState.AllQualifyingPods.Insert(podKey) // add pod id to "all pods"
+	lenAllPods := len(allPods)                          //new "all pods"
+
+	calcTarget, targetErr := m.CalculateTrueTargetSize(specTarget, lenAllPods, pp.Spec.Policy.Action)
+	if targetErr != nil {
+		return pp, targetErr
+	}
+
+	managedPods := ppState.PodsManagedByPolicy
+	lenManaged := len(managedPods)
+
+	if lenManaged >= calcTarget {
+		//after re-calculating target, the number of pods currently managed by the policy meets or exceeds the calculated target
+		metState := m.buildStatus(allPods, managedPods, true)
+		updatedPolicy := m.updateLocalPolicy(policyNamespace, policyName, *metState)
+		return updatedPolicy, nil
+	}
+
+	managedPods = managedPods.Insert(podKey)
+	lenManaged = lenManaged + 1
+
+	updatedState := m.buildStatus(allPods, managedPods, (lenManaged >= calcTarget))
+	policy := m.updateLocalPolicy(policyNamespace, policyName, *updatedState)
+	return policy, nil
+}
+
+func (m *PlacementPolicyManager) updateLocalPolicy(namespace string, name string, updatedStatus v1alpha1.PlacementPolicyStatus) *v1alpha1.PlacementPolicy {
+	m.policies[namespace][name].Status = updatedStatus
+	return m.policies[namespace][name]
+}
+
+func (m *PlacementPolicyManager) buildStatus(allPods sets.String, managedPods sets.String, targetMet bool) *v1alpha1.PlacementPolicyStatus {
+	updatedState := new(v1alpha1.PlacementPolicyStatus)
+	updatedState.AllQualifyingPods = allPods
+	updatedState.PodsManagedByPolicy = managedPods
+	updatedState.TargetMet = targetMet
+	return updatedState
 }

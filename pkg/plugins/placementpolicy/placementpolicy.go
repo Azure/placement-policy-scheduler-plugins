@@ -14,8 +14,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
@@ -42,13 +40,11 @@ var _ framework.ScorePlugin = &Plugin{}
 // New initializes and returns a new PlacementPolicy plugin.
 func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 
-	client := kubernetes.NewForConfigOrDie(handle.KubeConfig())
 	ppClient := ppclientset.NewForConfigOrDie(handle.KubeConfig())
 	ppInformerFactory := ppinformers.NewSharedInformerFactory(ppClient, 0)
 	ppInformer := ppInformerFactory.Placementpolicy().V1alpha1().PlacementPolicies()
 
 	ppMgr := core.NewPlacementPolicyManager(
-		client,
 		ppClient,
 		handle.SnapshotSharedLister(),
 		ppInformer,
@@ -106,7 +102,6 @@ func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) 
 				}
 			},
 			Handler: cache.ResourceEventHandlerFuncs{
-				UpdateFunc: plugin.UpdatePodPolicy,
 				DeleteFunc: plugin.RemovePodFromPolicy,
 			},
 		},
@@ -141,52 +136,14 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 	if pp.Spec.EnforcementMode == v1alpha1.EnforcementModeBestEffort {
 		return framework.NewStatus(framework.Success, "")
 	}
-	nodeInfoList, err := p.frameworkHandler.SnapshotSharedLister().NodeInfos().List()
+
+	policy, err := p.ppMgr.AddPodToPolicy(ctx, pod, pp)
+
 	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to get nodes in the cluster: %v", err))
-	}
-	nodeList := make([]*corev1.Node, 0, len(nodeInfoList))
-	for _, nodeInfo := range nodeInfoList {
-		nodeList = append(nodeList, nodeInfo.Node())
+		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
 	}
 
-	// nodeWithMatchingLabels is a group of nodes that have the same labels as defined in the placement policy
-	nodeWithMatchingLabels := groupNodesWithLabels(nodeList, pp.Spec.NodeSelector.MatchLabels)
-
-	podList, err := p.ppMgr.GetPodsWithLabels(ctx, pp.Spec.PodSelector.MatchLabels)
-	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to get pods with labels: %v", err))
-	}
-
-	// podsOnNodeWithMatchingLabels is a group of pods with matching pod labels defined in placement policy
-	// that are already on the nodes with matching labels or annotated to be on the nodes with matching node labels
-	// by the placement policy scheduler plugin
-	podsOnNodeWithMatchingLabels := len(groupPodsBasedOnNodePreference(podList, pod, nodeWithMatchingLabels))
-
-	targetSize, err := intstr.GetScaledValueFromIntOrPercent(pp.Spec.Policy.TargetSize, len(podList), false)
-	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to get scaled value from int or percent: %v", err))
-	}
-	// if the action is mustnot, we'll use the inverse of the target size against total pods
-	// to compute number of pods on nodes with matching labels
-	if pp.Spec.Policy.Action == v1alpha1.ActionMustNot {
-		targetSize = len(podList) - targetSize
-	}
-
-	preferredNodeWithMatchingLabels := false
-	// if the number of pods on the node with matching labels is less than the target size, then we should prefer the node
-	if podsOnNodeWithMatchingLabels < targetSize {
-		preferredNodeWithMatchingLabels = true
-	}
-
-	klog.InfoS("annotating pod", "pod", pod.Name, "plugin", "prefilter")
-	// annotate pod with placement policy
-	pod, err = p.ppMgr.AnnotatePod(ctx, pod, pp, preferredNodeWithMatchingLabels)
-	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to annotate pod %s: %v", pod.Name, err))
-	}
-
-	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, pp))
+	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, policy))
 	return framework.NewStatus(framework.Success, "")
 }
 
@@ -220,15 +177,15 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 	// defined in the placement policy chosen for the pod.
 	nodeMatchesLabels := checkHasLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
 
-	// podNodePreferMatchingLabels is set to true if the pod is annotated to be on the node with matching labels
-	podNodePreferMatchingLabels := false
-	if podNodePreferMatchingLabels, err = strconv.ParseBool(pod.Annotations[v1alpha1.PlacementPolicyPreferenceAnnotationKey]); err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to parse pod annotation: %v", err))
+	podKey, keyError := framework.GetPodKey(pod)
+	if keyError != nil {
+		return framework.NewStatus(framework.Error, "pod key not found")
 	}
+	policyManagesPod := d.pp.Status.PodsManagedByPolicy.Has(podKey)
 
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
-	if nodeMatchesLabels && podNodePreferMatchingLabels ||
-		!nodeMatchesLabels && !podNodePreferMatchingLabels {
+	if nodeMatchesLabels && policyManagesPod ||
+		!nodeMatchesLabels && !policyManagesPod {
 		return framework.NewStatus(framework.Success, "")
 	}
 
@@ -257,43 +214,13 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 		return framework.NewStatus(framework.Success, "")
 	}
 
-	// nodeWithMatchingLabels is a group of nodes that have the same labels as defined in the placement policy
-	nodeWithMatchingLabels := groupNodesWithLabels(nodes, pp.Spec.NodeSelector.MatchLabels)
+	policy, err := p.ppMgr.AddPodToPolicy(ctx, pod, pp)
 
-	podList, err := p.ppMgr.GetPodsWithLabels(ctx, pp.Spec.PodSelector.MatchLabels)
 	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to get pods with labels: %v", err))
+		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
 	}
 
-	// podsOnNodeWithMatchingLabels is a group of pods with matching pod labels defined in placement policy
-	// that are already on the nodes with matching labels or annotated to be on the nodes with matching node labels
-	// by the placement policy scheduler plugin
-	podsOnNodeWithMatchingLabels := len(groupPodsBasedOnNodePreference(podList, pod, nodeWithMatchingLabels))
-
-	targetSize, err := intstr.GetScaledValueFromIntOrPercent(pp.Spec.Policy.TargetSize, len(podList), false)
-	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to get scaled value from int or percent: %v", err))
-	}
-	// if the action is mustnot, we'll use the inverse of the target size against total pods
-	// to compute number of pods on nodes with matching labels
-	if pp.Spec.Policy.Action == v1alpha1.ActionMustNot {
-		targetSize = len(podList) - targetSize
-	}
-
-	preferredNodeWithMatchingLabels := false
-	// if the number of pods on the node with matching labels is less than the target size, then we should prefer the node
-	if podsOnNodeWithMatchingLabels < targetSize {
-		preferredNodeWithMatchingLabels = true
-	}
-
-	klog.InfoS("annotating pod", "pod", pod.Name, "plugin", "prefilter")
-	// annotate pod with placement policy
-	pod, err = p.ppMgr.AnnotatePod(ctx, pod, pp, preferredNodeWithMatchingLabels)
-	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to annotate pod %s: %v", pod.Name, err))
-	}
-
-	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, pp))
+	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, policy))
 	return framework.NewStatus(framework.Success, "")
 }
 
@@ -321,15 +248,15 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	// defined in the placement policy chosen for the pod.
 	nodeMatchesLabels := checkHasLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
 
-	// podNodePreferMatchingLabels is set to true if the pod is annotated to be on the node with matching labels
-	podNodePreferMatchingLabels := false
-	if podNodePreferMatchingLabels, err = strconv.ParseBool(pod.Annotations[v1alpha1.PlacementPolicyPreferenceAnnotationKey]); err != nil {
-		return 0, framework.NewStatus(framework.Error, fmt.Sprintf("failed to parse pod annotation: %v", err))
+	podKey, keyError := framework.GetPodKey(pod)
+	if keyError != nil {
+		return 0, framework.NewStatus(framework.Error, "pod key not found")
 	}
+	policyManagesPod := d.pp.Status.PodsManagedByPolicy.Has(podKey)
 
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
-	if nodeMatchesLabels && podNodePreferMatchingLabels ||
-		!nodeMatchesLabels && !podNodePreferMatchingLabels {
+	if nodeMatchesLabels && policyManagesPod ||
+		!nodeMatchesLabels && !policyManagesPod {
 		return 100, nil
 	}
 
@@ -462,22 +389,6 @@ func (p *Plugin) RemovePodFromPolicy(obj interface{}) {
 	defer p.Unlock()
 
 	p.ppMgr.RemovePodFromPolicy(pod)
-}
-
-func (p *Plugin) UpdatePodPolicy(old interface{}, new interface{}) {
-	oldPod := old.(*corev1.Pod)
-	newPod := new.(*corev1.Pod)
-
-	if oldPod.Status.Phase == corev1.PodSucceeded || oldPod.Status.Phase == corev1.PodFailed {
-		return
-	}
-
-	if newPod.Status.Phase != corev1.PodRunning && newPod.Status.Phase != corev1.PodPending {
-		p.Lock()
-		defer p.Unlock()
-
-		p.ppMgr.UpdatePodPolicy(oldPod, newPod)
-	}
 }
 
 func (p *Plugin) AddPolicy(obj interface{}) {

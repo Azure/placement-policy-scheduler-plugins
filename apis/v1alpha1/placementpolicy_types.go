@@ -81,10 +81,10 @@ type PlacementPolicyStatus struct {
 
 	//All pods that would fall under this policy
 	AllQualifyingPods sets.String `json:"allQualifyingPods,omitempty"`
-	//Pods assigned to nodes based on this policy - those which are considered when computing "current size"
+	//Pods assigned to nodes based on this policy - the length of which is considered the "current size"
 	PodsManagedByPolicy sets.String `json:"podsManagedByPolicy,omitempty"`
-	//Computed whenever a pod is added or removed from the "managed by" list; Policy is "met" when this value is equal to target
-	CurrentSize *intstr.IntOrString `json:"currentSize,omitempty"`
+	//Whether "current size" is equal to computed target size
+	TargetMet bool `json:"targetMet"`
 }
 
 //+kubebuilder:object:root=true
