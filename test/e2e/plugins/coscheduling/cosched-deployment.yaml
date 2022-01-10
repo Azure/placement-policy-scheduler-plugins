@@ -1,0 +1,7 @@
+apiVersion: scheduling.sigs.k8s.io/v1alpha1
+kind: PodGroup
+metadata:
+  name: nginx
+spec:
+  scheduleTimeoutSeconds: 10
+  minMember: 3

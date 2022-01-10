@@ -44,6 +44,7 @@ func TestMain(m *testing.M) {
 	os.Exit(testenv.Run(m))
 }
 
+//deploy placement policy manifest
 func deploySchedulerManifest() env.Func {
 	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
 		wd, err := os.Getwd()
