@@ -15,7 +15,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
@@ -52,9 +51,7 @@ func TestMustStrictNoderesources(t *testing.T) {
 			if err := cfg.Client().Resources().Create(ctx, deployment); err != nil {
 				t.Error("Failed to create deployment", err)
 			}
-			// if err := KubectlApply(cfg.KubeconfigFile(), cfg.Namespace(), []string{"-f", fmt.Sprintf("%s/%s", pluginsResourceAbsolutePath, "noderesources-deployment.yaml")}); err != nil {
-			// 	t.Error("Failed to deploy config", err)
-			// }
+
 			return ctx
 		}).
 		Assess("Pods successfully assigned to the right nodes with Must Strict and noderesources plugins option", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
@@ -71,19 +68,18 @@ func TestMustStrictNoderesources(t *testing.T) {
 				t.Error("deployment not found", err)
 			}
 
-			// check if 4 pods out of 10 (40%) are running in the node with the same node selector
-			pods := &corev1.PodList{}
-			if err := wait.For(conditions.New(client.Resources()).ResourceListMatchN(pods, 4, func(object k8s.Object) bool {
-
-				if object.(*corev1.Pod).Spec.NodeName != "placement-policy-worker3" {
-					return true
-				}
-				return false
-			}, resources.WithLabelSelector(labels.FormatLabels(podSelectorLabels))),
-				wait.WithTimeout(time.Minute*4)); err != nil {
-				t.Error("number of pods assigned to nodes with the required nodeSelector do not match", err)
+			var pods corev1.PodList
+			if err := client.Resources().List(ctx, &pods, resources.WithLabelSelector(labels.FormatLabels(map[string]string{"name": "test"}))); err != nil {
+				t.Error("cannot get list of pods", err)
 			}
 
+			for i := range pods.Items {
+				if pods.Items[i].Spec.NodeName != "placement-policy-worker3" {
+					continue
+				} else {
+					t.Error("pods assigned to the wrong node", err)
+				}
+			}
 			return context.WithValue(ctx, "deployment-test", &resultDeployment)
 		}).
 		Teardown(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {

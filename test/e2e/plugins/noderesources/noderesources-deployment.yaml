@@ -30,14 +30,44 @@ spec:
             example.com/deviceA: 1
             example.com/deviceB: 1
 ---
+apiVersion: topology.node.k8s.io/v1alpha1
+kind: NodeResourceTopology
+metadata:
+  name: worker1
+topologyPolicies: ["SingleNUMANodeContainerLevel"]
+zones:
+  - name: placement-policy-worker1
+    type: Node
+    resources:
+      - name: cpu
+        capacity: 4
+        allocatable: 3
+      - name: example.com/deviceA
+        capacity: 1
+        allocatable: 1
+      - name: example.com/deviceB
+        capacity: 2
+        allocatable: 2
+  - name: placement-policy-worker2
+    type: Node
+    resources:
+      - name: cpu
+        capacity: 4
+        allocatable: 3
+      - name: example.com/deviceA
+        capacity: 2
+        allocatable: 2
+      - name: example.com/deviceB
+        capacity: 1
+        allocatable: 1
 ---
 apiVersion: topology.node.k8s.io/v1alpha1
 kind: NodeResourceTopology
 metadata:
-  name: worker-node-a
+  name: worker2
 topologyPolicies: ["SingleNUMANodeContainerLevel"]
 zones:
-  - name: node-0
+  - name: placement-policy-worker1
     type: Node
     resources:
       - name: cpu
@@ -49,39 +79,7 @@ zones:
       - name: example.com/deviceB
         capacity: 2
         allocatable: 2
-  - name: node-1
-    type: Node
-    resources:
-      - name: cpu
-        capacity: 4
-        allocatable: 3
-      - name: example.com/deviceA
-        capacity: 2
-        allocatable: 2
-      - name: example.com/deviceB
-        capacity: 1
-        allocatable: 1
----
----
-apiVersion: topology.node.k8s.io/v1alpha1
-kind: NodeResourceTopology
-metadata:
-  name: worker-node-a
-topologyPolicies: ["SingleNUMANodeContainerLevel"]
-zones:
-  - name: node-0
-    type: Node
-    resources:
-      - name: cpu
-        capacity: 4
-        allocatable: 3
-      - name: example.com/deviceA
-        capacity: 1
-        allocatable: 1
-      - name: example.com/deviceB
-        capacity: 2
-        allocatable: 2
-  - name: node-1
+  - name: placement-policy-worker2
     type: Node
     resources:
       - name: cpu

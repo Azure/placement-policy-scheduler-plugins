@@ -53,9 +53,7 @@ func TestMustStrictCoscheduling(t *testing.T) {
 			if err := cfg.Client().Resources().Create(ctx, statefulset); err != nil {
 				t.Error("Failed to create statefulset", err)
 			}
-			// if err := KubectlApply(cfg.KubeconfigFile(), cfg.Namespace(), []string{"-f", fmt.Sprintf("%s/%s", pluginsResourceAbsolutePath, "cosched-deployment.yaml")}); err != nil {
-			// 	t.Error("Failed to deploy config", err)
-			// }
+
 			return ctx
 		}).
 		Assess("Pods successfully assigned to the right nodes with Must Strict and Coscheduling plugins option", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
@@ -74,17 +72,17 @@ func TestMustStrictCoscheduling(t *testing.T) {
 				t.Error("Failed to deploy a statefulset", err)
 			}
 
-			// check if 4 pods out of 10 (40%) are running in the node with the same node selector
-			pods := &corev1.PodList{}
-			if err := wait.For(conditions.New(client.Resources()).ResourceListMatchN(pods, 4, func(object k8s.Object) bool {
+			var pods corev1.PodList
+			if err := client.Resources().List(ctx, &pods, resources.WithLabelSelector(labels.FormatLabels(map[string]string{"app": "nginx", "pod-group.scheduling.sigs.k8s.io": "nginx"}))); err != nil {
+				t.Error("cannot get list of pods", err)
+			}
 
-				if object.(*corev1.Pod).Spec.NodeName != "placement-policy-worker3" {
-					return true
+			for i := range pods.Items {
+				if pods.Items[i].Spec.NodeName != "placement-policy-worker3" {
+					continue
+				} else {
+					t.Error("pods assigned to the wrong node", err)
 				}
-				return false
-			}, resources.WithLabelSelector(labels.FormatLabels(podSelectorLabels))),
-				wait.WithTimeout(time.Minute*4)); err != nil {
-				t.Error("number of pods assigned to nodes with the required nodeSelector do not match", err)
 			}
 
 			return context.WithValue(ctx, "statefulset-test", &resultStatefulset)
