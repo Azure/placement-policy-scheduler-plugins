@@ -26,6 +26,16 @@ import (
 func TestMustStrictCoscheduling(t *testing.T) {
 	deploymentFeat := features.New("Test Must Strict Placement policy with Coscheduling plugins").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			// deploy placement policy config
+			if err := deploySchedulerConfig(cfg.KubeconfigFile(), cfg.Namespace(), "examples", "v1alpha1_placementpolicy_strict_must.yml"); err != nil {
+				t.Error("Failed to deploy placement policy config", err)
+			}
+
+			lables := map[string]string{
+				"app":                              "nginx",
+				"pod-group.scheduling.sigs.k8s.io": "nginx",
+			}
+
 			wd, err := os.Getwd()
 			if err != nil {
 				t.Error(err)
@@ -34,20 +44,12 @@ func TestMustStrictCoscheduling(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
+
 			// deploy Coscheduling config
-			if err := KubectlApply(cfg.KubeconfigFile(), "kube-system", []string{"-f", fmt.Sprintf("%s/%s", pluginsResourceAbsolutePath, "coscheduling.yaml")}); err != nil {
-				t.Error("Failed to deploy config", err)
+			if err := KubectlApply(cfg.KubeconfigFile(), "scheduler-plugins", []string{"-f", fmt.Sprintf("%s/%s", pluginsResourceAbsolutePath, "")}); err != nil {
+				t.Error("Failed to deploy coscheduling config", err)
 			}
 
-			// deploy placement policy config
-			if err := deploySchedulerConfig(cfg.KubeconfigFile(), cfg.Namespace(), "examples", "v1alpha1_placementpolicy_strict_must.yml"); err != nil {
-				t.Error("Failed to deploy config", err)
-			}
-
-			lables := map[string]string{
-				"app":                              "nginx",
-				"pod-group.scheduling.sigs.k8s.io": "nginx",
-			}
 			// deploy a sample replicaset
 			statefulset := newStatefulSet(cfg.Namespace(), "statefulset-test", 6, lables)
 			if err := cfg.Client().Resources().Create(ctx, statefulset); err != nil {
