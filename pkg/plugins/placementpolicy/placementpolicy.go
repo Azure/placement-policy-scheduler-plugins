@@ -55,28 +55,6 @@ func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) 
 		ppMgr:            ppMgr,
 	}
 
-	ppInformer.Informer().AddEventHandler(
-		cache.FilteringResourceEventHandler{
-			FilterFunc: func(obj interface{}) bool {
-				switch t := obj.(type) {
-				case *v1alpha1.PlacementPolicy:
-					return true
-				case cache.DeletedFinalStateUnknown:
-					if _, ok := t.Obj.(*v1alpha1.PlacementPolicy); ok {
-						return true
-					}
-					return false
-				default:
-					return false
-				}
-			},
-			Handler: cache.ResourceEventHandlerFuncs{
-				AddFunc:    plugin.AddPolicy,
-				UpdateFunc: plugin.UpdatePolicy,
-				DeleteFunc: plugin.RemovePolicy,
-			},
-		})
-
 	ctx := context.Background()
 	ppInformerFactory.Start(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), ppInformer.Informer().HasSynced) {
@@ -143,7 +121,7 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
 	}
 
-	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, policy))
+	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, pp, policy))
 	return framework.NewStatus(framework.Success, "")
 }
 
@@ -181,7 +159,8 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 	if keyError != nil {
 		return framework.NewStatus(framework.Error, "pod key not found")
 	}
-	policyManagesPod := d.pp.Status.PodsManagedByPolicy.Has(podKey)
+
+	policyManagesPod := d.info.PodIsManagedByPolicy(podKey)
 
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
 	if nodeMatchesLabels && policyManagesPod ||
@@ -220,7 +199,7 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
 	}
 
-	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, policy))
+	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, pp, policy))
 	return framework.NewStatus(framework.Success, "")
 }
 
@@ -252,7 +231,7 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	if keyError != nil {
 		return 0, framework.NewStatus(framework.Error, "pod key not found")
 	}
-	policyManagesPod := d.pp.Status.PodsManagedByPolicy.Has(podKey)
+	policyManagesPod := d.info.PodIsManagedByPolicy(podKey)
 
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
 	if nodeMatchesLabels && policyManagesPod ||
@@ -388,33 +367,8 @@ func (p *Plugin) RemovePodFromPolicy(obj interface{}) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.ppMgr.RemovePodFromPolicy(pod)
-}
-
-func (p *Plugin) AddPolicy(obj interface{}) {
-	policy := obj.(*v1alpha1.PlacementPolicy)
-
-	p.Lock()
-	defer p.Unlock()
-
-	p.ppMgr.AddPolicy(policy)
-}
-
-func (p *Plugin) UpdatePolicy(old interface{}, new interface{}) {
-	oldPolicy := old.(*v1alpha1.PlacementPolicy)
-	newPolicy := new.(*v1alpha1.PlacementPolicy)
-
-	p.Lock()
-	defer p.Unlock()
-
-	p.ppMgr.UpdatePolicy(oldPolicy, newPolicy)
-}
-
-func (p *Plugin) RemovePolicy(obj interface{}) {
-	policy := obj.(*v1alpha1.PlacementPolicy)
-
-	p.Lock()
-	defer p.Unlock()
-
-	p.ppMgr.DeletePolicy(policy)
+	removeError := p.ppMgr.RemovePodFromPolicy(pod)
+	if removeError != nil {
+		klog.ErrorS(removeError, "error removing pod from placement policy")
+	}
 }
