@@ -39,6 +39,8 @@ func NewPolicyInfos() PolicyInfos {
 }
 
 func (p *PolicyInfo) merge(existing *PolicyInfo) *PolicyInfo {
+	existing.Action = p.Action
+	existing.TargetSize = p.TargetSize
 	existing.targetMet = p.targetMet
 	existing.allQualifyingPods = sets.NewString()
 	existing.podsManagedByPolicy = sets.NewString()
@@ -70,12 +72,10 @@ func (p *PolicyInfo) removePodIfPresent(pod *corev1.Pod) error {
 		return nil
 	}
 
-	allQualifying := p.allQualifyingPods
-	p.allQualifyingPods = allQualifying.Delete(key)
+	delete(p.allQualifyingPods, key)
 
 	if p.PodIsManagedByPolicy(key) {
-		managed := p.podsManagedByPolicy
-		p.podsManagedByPolicy = managed.Delete(key)
+		delete(p.podsManagedByPolicy, key)
 	}
 
 	err := p.setTargetMet()
@@ -88,28 +88,27 @@ func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
 		return keyError
 	}
 
+	//if pod is already in the list, do nothing
 	if p.PodQualifiesForPolicy(key) {
 		return nil
 	}
 
-	qualifyingPods := p.allQualifyingPods
-	p.allQualifyingPods = qualifyingPods.Insert(key)
+	p.allQualifyingPods = p.allQualifyingPods.Insert(key)
 
-	targetMetWithoutNewPod, targetErr := p.computeTargetMet()
+	targetErr := p.setTargetMet()
 	if targetErr != nil {
 		return targetErr
 	}
 
-	if targetMetWithoutNewPod {
-		p.targetMet = true
+	//if target was met without also adding the pod to the "managed" list, then nothing else to do
+	if p.targetMet {
 		return nil
 	}
 
-	managedPods := p.podsManagedByPolicy
-	p.podsManagedByPolicy = managedPods.Insert(key)
+	p.podsManagedByPolicy = p.podsManagedByPolicy.Insert(key)
 
-	setErr := p.setTargetMet()
-	return setErr
+	err := p.setTargetMet()
+	return err
 }
 
 func (p *PolicyInfo) calculateTrueTargetSize() (int, error) {
@@ -130,23 +129,14 @@ func (p *PolicyInfo) calculateTrueTargetSize() (int, error) {
 }
 
 func (p *PolicyInfo) setTargetMet() error {
-	targetMet, err := p.computeTargetMet()
-	if err != nil {
-		return err
-	}
-	p.targetMet = targetMet
-	return nil
-}
-
-func (p *PolicyInfo) computeTargetMet() (bool, error) {
 	target, calcError := p.calculateTrueTargetSize()
 	if calcError != nil {
-		return false, calcError
+		return calcError
 	}
 
 	managedCount := len(p.podsManagedByPolicy)
-	targetMet := managedCount < target
-	return targetMet, nil
+	p.targetMet = managedCount < target
+	return nil
 }
 
 func (p *PolicyInfo) PodQualifiesForPolicy(podKey string) bool {

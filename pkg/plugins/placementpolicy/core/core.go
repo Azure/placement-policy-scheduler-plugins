@@ -5,14 +5,12 @@ import (
 	"sort"
 
 	"github.com/Azure/placement-policy-scheduler-plugins/apis/v1alpha1"
-	ppclientset "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/clientset/versioned"
 	ppinformers "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/informers/externalversions/apis/v1alpha1"
 	pplisters "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/listers/apis/v1alpha1"
 	"github.com/Azure/placement-policy-scheduler-plugins/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
@@ -24,12 +22,6 @@ type Manager interface {
 }
 
 type PlacementPolicyManager struct {
-	// client is a placementPolicy client
-	ppClient ppclientset.Interface
-	// podLister is pod lister
-	podLister corelisters.PodLister
-	// snapshotSharedLister is pod shared list
-	snapshotSharedLister framework.SharedLister
 	// ppLister is placementPolicy lister
 	ppLister pplisters.PlacementPolicyLister
 	// available policies by namespace
@@ -37,16 +29,10 @@ type PlacementPolicyManager struct {
 }
 
 func NewPlacementPolicyManager(
-	ppClient ppclientset.Interface,
-	snapshotSharedLister framework.SharedLister,
-	ppInformer ppinformers.PlacementPolicyInformer,
-	podLister corelisters.PodLister) *PlacementPolicyManager {
+	ppInformer ppinformers.PlacementPolicyInformer) *PlacementPolicyManager {
 	return &PlacementPolicyManager{
-		ppClient:             ppClient,
-		snapshotSharedLister: snapshotSharedLister,
-		ppLister:             ppInformer.Lister(),
-		podLister:            podLister,
-		policies:             NewPolicyInfos(),
+		ppLister: ppInformer.Lister(),
+		policies: NewPolicyInfos(),
 	}
 }
 
@@ -105,13 +91,13 @@ func (m *PlacementPolicyManager) RemovePodFromPolicy(pod *corev1.Pod) error {
 				return removeError
 			}
 
-			m.upsertPolicyInfo(matchingPolicy, true)
+			m.updatePolicies(matchingPolicy)
 		}
 	}
 	return nil
 }
 
-func (m *PlacementPolicyManager) getInfoForPolicy(pp *v1alpha1.PlacementPolicy) (*PolicyInfo, bool) {
+func (m *PlacementPolicyManager) getPolicyInfoForPlacementPolicy(pp *v1alpha1.PlacementPolicy) *PolicyInfo {
 	ppNamespace := pp.Namespace
 	ppName := pp.Name
 
@@ -120,39 +106,49 @@ func (m *PlacementPolicyManager) getInfoForPolicy(pp *v1alpha1.PlacementPolicy) 
 	if exists {
 		policy, policyExists := namespace[ppName]
 		if policyExists {
-			return policy, true
+			return policy
 		}
 	}
 
 	info := newPolicyInfo(ppNamespace, ppName, pp.Spec.Policy.Action, pp.Spec.Policy.TargetSize)
-	return info, false
+	return info
 }
 
 func (m *PlacementPolicyManager) AddPodToPolicy(ctx context.Context, pod *corev1.Pod, pp *v1alpha1.PlacementPolicy) (*PolicyInfo, error) {
-	policy, exists := m.getInfoForPolicy(pp)
+	policy := m.getPolicyInfoForPlacementPolicy(pp)
+
 	addError := policy.addPodIfNotPresent(pod)
-	m.upsertPolicyInfo(policy, exists)
-	return policy, addError
+	if addError != nil {
+		return policy, addError
+	}
+
+	m.updatePolicies(policy)
+	return policy, nil
 }
 
-func (m *PlacementPolicyManager) upsertPolicyInfo(policy *PolicyInfo, exists bool) {
+func (m *PlacementPolicyManager) updatePolicies(policy *PolicyInfo) {
 	namespace := policy.Namespace
 	name := policy.Name
 
-	if exists {
-		existing := m.policies[namespace][name]
-		m.policies[namespace][name] = policy.merge(existing)
-		return
-	}
-
 	namespacePolicies, namespaceExists := m.policies[namespace]
-	if !namespaceExists {
-		policies := make(map[string]*PolicyInfo)
-		policies[name] = policy
-		m.policies[namespace] = policies
-		return
-	}
 
-	namespacePolicies[name] = policy
-	m.policies[namespace] = namespacePolicies
+	if namespaceExists {
+		existing, exists := namespacePolicies[name]
+		if exists {
+			qualifyingPodCount := len(policy.allQualifyingPods)
+			if qualifyingPodCount > 0 {
+				m.policies[namespace][name] = policy.merge(existing)
+				return
+			}
+
+			// to ensure the in-memory collection of policies is kept reasonably sized, if a policy has 0 associated pods, it should be removed from the collection
+			// since the lister for policies is always used to match to a pod, there is no opportunity for a pod to be matched with a deleted policy
+			// on the flip side, this also means that changes to or deletion of a policy are handled here when a pod is added or removed versus attaching an event handler to the policy informer
+			delete(m.policies[namespace], name)
+			return
+		}
+	} else {
+		m.policies[namespace] = make(map[string]*PolicyInfo)
+	}
+	m.policies[namespace][name] = policy
 }

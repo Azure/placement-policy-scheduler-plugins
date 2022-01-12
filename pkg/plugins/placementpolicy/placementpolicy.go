@@ -44,11 +44,7 @@ func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) 
 	ppInformerFactory := ppinformers.NewSharedInformerFactory(ppClient, 0)
 	ppInformer := ppInformerFactory.Placementpolicy().V1alpha1().PlacementPolicies()
 
-	ppMgr := core.NewPlacementPolicyManager(
-		ppClient,
-		handle.SnapshotSharedLister(),
-		ppInformer,
-		handle.SharedInformerFactory().Core().V1().Pods().Lister())
+	ppMgr := core.NewPlacementPolicyManager(ppInformer)
 
 	plugin := &Plugin{
 		frameworkHandler: handle,
