@@ -59,4 +59,4 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
     - name: Run e2e test
-      run: make e2e-test
+      run: OUTPUT_TYPE=type=docker make docker-build e2e-test
