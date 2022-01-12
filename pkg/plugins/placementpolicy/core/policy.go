@@ -135,7 +135,7 @@ func (p *PolicyInfo) setTargetMet() error {
 	}
 
 	managedCount := len(p.podsManagedByPolicy)
-	p.targetMet = managedCount < target
+	p.targetMet = managedCount <= target
 	return nil
 }
 
