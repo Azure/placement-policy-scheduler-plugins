@@ -72,10 +72,10 @@ func (p *PolicyInfo) removePodIfPresent(pod *corev1.Pod) error {
 		return nil
 	}
 
-	delete(p.allQualifyingPods, key)
+	p.allQualifyingPods = p.allQualifyingPods.Delete(key)
 
 	if p.PodIsManagedByPolicy(key) {
-		delete(p.podsManagedByPolicy, key)
+		p.podsManagedByPolicy = p.podsManagedByPolicy.Delete(key)
 	}
 
 	err := p.setTargetMet()
