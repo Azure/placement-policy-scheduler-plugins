@@ -1,5 +1,4 @@
-# TODO(aramase) use the github registry to publish the image
-REGISTRY ?= aramase
+REGISTRY ?= ghcr.io/azure/placement-policy-scheduler-plugins
 IMAGE_NAME := placement-policy
 IMAGE_VERSION ?= v0.1.0
 
@@ -122,7 +121,7 @@ integration-test: install-etcd autogen manager manifests
 # Run all tests
 .PHONY: e2e-test
 e2e-test: 
-	go test -tags=e2e -v ./test/e2e
+	REGISTRY=${REGISTRY} IMAGE_NAME=${IMAGE_NAME} IMAGE_VERSION=${IMAGE_VERSION} go test -tags=e2e -v ./test/e2e
 
 ## --------------------------------------
 ## Images

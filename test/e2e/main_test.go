@@ -26,6 +26,9 @@ var (
 	providerResourceDirectory = "manifest_staging/deploy"
 	providerResource          = "kube-scheduler-configuration.yml"
 	testenv                   env.Environment
+	registry                  = os.Getenv("REGISTRY")
+	imageName                 = os.Getenv("IMAGE_NAME")
+	imageVersion              = os.Getenv("IMAGE_VERSION")
 )
 
 func TestMain(m *testing.M) {
@@ -36,6 +39,7 @@ func TestMain(m *testing.M) {
 	testenv.Setup(
 		envfuncs.CreateKindClusterWithConfig(kindClusterName, "kindest/node:v1.22.2", "kind-config.yaml"),
 		envfuncs.CreateNamespace(namespace),
+		envfuncs.LoadDockerImageToCluster(kindClusterName, fmt.Sprintf("%s/%s:%s", registry, imageName, imageVersion)),
 		deploySchedulerManifest(),
 	).Finish( // Cleanup KinD Cluster
 		envfuncs.DeleteNamespace(namespace),
