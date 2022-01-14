@@ -2,14 +2,16 @@
 
 A stand alone scheduler that wraps current scheduler and uses [scheduler framework](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/) with two additional plugins. The scheduler will run side by side with existing kubernetes scheduler and users will have to [specifically specify this scheduler](https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/) to use for their workloads that perform the following:
 
-- A scorer plugin (a scorer extension) that will be used in case “best effort” policy enforcement.
+- A scorer plugin implemented with that will be used in case “best effort” policy enforcement.
+  - Extension points implemented: [PreScore](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#pre-score) and [Score](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#score)
 - A filter plugin that will be used in case “force” policy enforcement.
+  - Extension points implemented: [PreFilter](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#pre-filter) and [Filter](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#filter)
 
 **WARNING:** This is experimental code. It is not considered production-grade by its developers, nor is it "supported" software.
 
 ## Install
 
-The container images for the scheduler plugin are available in the github container registry.
+The container images for the scheduler plugin is available in the github container registry.
 
 ### Quick Install
 
