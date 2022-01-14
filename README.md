@@ -82,7 +82,7 @@ spec:
 
 ### Demo
 
-- Create a [KinD](https://kind.sigs.k8s.io/) cluster with the following config
+#### 1. Create a [kind](https://kind.sigs.k8s.io/) cluster with the following config
 
 ```sh
 cat <<EOF | kind create cluster --name placement-policy --config=-
@@ -149,13 +149,11 @@ kind-worker2         want
 kind-worker3         unwant
 ```
 
-- Install the placement-policy-scheduler-plugins as a secondary scheduler
-
-Follow the quick start above to install the plugin.
-
 </details><br/>
 
-- Deploy a `placement policy` CRD
+#### 2. Follow the [Install](#install) section to deploy placement-policy-scheduler-plugins as a secondary scheduler
+
+#### 3. Deploy a `PlacementPolicy` CRD
   
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/Azure/placement-policy-scheduler-plugins/main/examples/v1alpha1_placementpolicy_strict_must.yml
@@ -168,7 +166,7 @@ placementpolicy.placement-policy.scheduling.x-k8s.io/strict-must created
 ```
 </details><br/>
 
-- Deploy a `ReplicaSet` that will create 10 replicas
+#### 4. Deploy a `ReplicaSet` that will create 10 replicas
 
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/Azure/placement-policy-scheduler-plugins/main/examples/demo_replicaset.yml
@@ -182,10 +180,10 @@ replicaset.apps/nginx created
 ```
 </details><br/>
 
-- Get all the pod 
+#### 5. Get pods with matching labels
 
 ```sh
-kubectl get po -o wide
+kubectl get po -o wide -l app=nginx
 
 NAME          READY   STATUS    RESTARTS   AGE   IP           NODE           NOMINATED NODE   READINESS GATES
 nginx-8cr58   1/1     Running   0          76s   10.244.3.4   kind-worker3   <none>           <none>
@@ -199,11 +197,12 @@ nginx-vq598   1/1     Running   0          76s   10.244.3.7   kind-worker3   <no
 nginx-xzxsb   1/1     Running   0          76s   10.244.3.3   kind-worker3   <none>           <none>
 nginx-zwrsk   1/1     Running   0          76s   10.244.3.5   kind-worker3   <none>           <none>
 ```
-We will find the nodes which carry the same node selector definded in the CRD have been assigned to 40% only from the workload that have been definded in the CRD `targetSize`
 
-### Clean up
+We will find the nodes which carry the same node selector defined in the strict-must `PlacementPolicy` have been assigned 40% of the workload as defined with `targetSize`.
 
-- Delete [KinD](https://kind.sigs.k8s.io/) cluster
+#### 6. Clean up
+
+- Delete [kind](https://kind.sigs.k8s.io/) cluster
 
 ```bash
 kind delete cluster --name placement-policy
