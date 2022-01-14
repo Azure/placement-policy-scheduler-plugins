@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pp-plugins-scheduler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "placement-policy-scheduler-plugins.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "placement-policy-scheduler-plugins.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "placement-policy-scheduler-plugins.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: pp-plugins-scheduler
+      containers:
+      - command:
+        - /manager
+        - --config=/etc/schedulerconfig/scheduler-config.yaml
+        - --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
+        - --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
+        image: {{ .Values.image }}
+        name: pp-plugins-scheduler
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - name: scheduler-config
+          mountPath: /etc/schedulerconfig
+          readOnly: true
+        - name: etckubernetes
+          mountPath: /etc/kubernetes
+          readOnly: true
+      hostNetwork: false
+      hostPID: false
+      volumes:
+      - name: scheduler-config
+        configMap:
+          name: pp-scheduler-config
+      - hostPath:
+          path: /etc/kubernetes/
+          type: Directory
+        name: etckubernetes
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      nodeSelector:
+        node-role.kubernetes.io/master: ""

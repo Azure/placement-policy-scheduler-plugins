@@ -1,0 +1,373 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: placementpolicies.placement-policy.scheduling.x-k8s.io
+spec:
+  group: placement-policy.scheduling.x-k8s.io
+  names:
+    kind: PlacementPolicy
+    listKind: PlacementPolicyList
+    plural: placementpolicies
+    singular: placementpolicy
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PlacementPolicy is the Schema for the placementpolicies API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PlacementPolicySpec defines the desired state of PlacementPolicy
+            properties:
+              enforcementMode:
+                description: 'enforcementMode is an enum that specifies how the policy
+                  will be enforced during scheduler (e.g. the application of filter
+                  vs scorer plugin). Values allowed for this field are: BestEffort
+                  (default): the policy will be enforced as best effort (scorer mode).
+                  Strict: the policy will be forced during scheduling. The filter
+                  approach will be used. Note: that may yield pods unschedulable.'
+                type: string
+              nodeSelector:
+                description: nodeSelector selects the nodes where the placement policy
+                  will apply on according to action
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: A label selector requirement is a selector that
+                        contains values, a key, and an operator that relates the key
+                        and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: operator represents a key's relationship to
+                            a set of values. Valid operators are In, NotIn, Exists
+                            and DoesNotExist.
+                          type: string
+                        values:
+                          description: values is an array of string values. If the
+                            operator is In or NotIn, the values array must be non-empty.
+                            If the operator is Exists or DoesNotExist, the values
+                            array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: matchLabels is a map of {key,value} pairs. A single
+                      {key,value} in the matchLabels map is equivalent to an element
+                      of matchExpressions, whose key field is "key", the operator
+                      is "In", and the values array contains only "value". The requirements
+                      are ANDed.
+                    type: object
+                type: object
+              podSelector:
+                description: podSelector identifies which pods this placement policy
+                  will apply on
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: A label selector requirement is a selector that
+                        contains values, a key, and an operator that relates the key
+                        and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: operator represents a key's relationship to
+                            a set of values. Valid operators are In, NotIn, Exists
+                            and DoesNotExist.
+                          type: string
+                        values:
+                          description: values is an array of string values. If the
+                            operator is In or NotIn, the values array must be non-empty.
+                            If the operator is Exists or DoesNotExist, the values
+                            array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: matchLabels is a map of {key,value} pairs. A single
+                      {key,value} in the matchLabels map is equivalent to an element
+                      of matchExpressions, whose key field is "key", the operator
+                      is "In", and the values array contains only "value". The requirements
+                      are ANDed.
+                    type: object
+                type: object
+              policy:
+                description: Policy is the policy placement for target based on action
+                properties:
+                  action:
+                    description: 'The action field is policy placement action. It
+                      is a string enum that carries the following possible values:
+                      Must(default): based on the rule below pods must be placed on
+                      nodes selected by node selector MustNot: based on the rule pods
+                      must *not* be placed nodes selected by node selector'
+                    type: string
+                  targetSize:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: 'TargetSize is the number of pods that can or cannot
+                      be placed on the node. Value can be an absolute number (ex:
+                      5) or a percentage of desired pods (ex: 10%). Absolute number
+                      is calculated from percentage by rounding down.'
+                    x-kubernetes-int-or-string: true
+                type: object
+              weight:
+                description: The policy weight allows the engine to decide which policy
+                  to use when pods match multiple policies. If multiple policies matched
+                  and all share the same weight then a policy with spec.enforcementMode
+                  == Force will be selected. If multiple policies match and +1 policy
+                  is marked as “Force” enforcementMode then they will sorted alphabetically
+                  / ascending and first one will be used. The scheduler publishes
+                  events capturing this conflict when it happens. Weight == 0-100
+                  is reserved for future use.
+                format: int32
+                type: integer
+            type: object
+          status:
+            description: PlacementPolicyStatus defines the observed state of PlacementPolicy
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pp-scheduler-config
+  namespace: kube-system
+data:
+  scheduler-config.yaml: |
+    apiVersion: kubescheduler.config.k8s.io/v1beta1
+    kind: KubeSchedulerConfiguration
+    leaderElection:
+      leaderElect: false
+    clientConnection:
+      kubeconfig: /etc/kubernetes/scheduler.conf
+    profiles:
+    - schedulerName: placement-policy-plugins-scheduler
+      plugins:
+        preScore:
+          enabled:
+          - name: placementpolicy
+        score:
+          enabled:
+          - name: placementpolicy
+        preFilter:
+          enabled:
+          - name: placementpolicy
+        filter:
+          enabled:
+          - name: placementpolicy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pp-plugins-scheduler
+rules:
+- apiGroups: ["", "events.k8s.io"]
+  resources: ["events"]
+  verbs: ["create", "patch", "update"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["create"]
+- apiGroups: ["coordination.k8s.io"]
+  resourceNames: ["kube-scheduler"]
+  resources: ["leases"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resourceNames: ["kube-scheduler"]
+  resources: ["endpoints"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["delete", "get", "list", "watch", "update"]
+- apiGroups: [""]
+  resources: ["bindings", "pods/binding"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["pods/status"]
+  verbs: ["patch", "update"]
+- apiGroups: [""]
+  resources: ["replicationcontrollers", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps", "extensions"]
+  resources: ["replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims", "persistentvolumes"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["subjectaccessreviews"]
+  verbs: ["create"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["csinodes", "storageclasses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["placement-policy.scheduling.x-k8s.io"]
+  resources: ["placementpolicies"]
+  verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name:  pp-plugins-scheduler
+subjects:
+- kind: User
+  name: system:kube-scheduler
+  namespace: kube-system
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name:  pp-plugins-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+# To be able to to retrieve the PlacementPolicy objects, the following role has been added
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pp-plugins-scheduler-as-kube-scheduler
+  namespace: kube-system
+subjects:
+  - kind: ServiceAccount
+    name: pp-plugins-scheduler
+    namespace: kube-system
+roleRef:
+  kind: Role
+  name: extension-apiserver-authentication-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pp-plugins-scheduler-as-kube-scheduler
+subjects:
+  - kind: ServiceAccount
+    name: pp-plugins-scheduler
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: pp-plugins-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pp-plugins-scheduler
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    component: scheduler
+  name: pp-plugins-scheduler
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      component: scheduler
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: scheduler
+    spec:
+      serviceAccountName: pp-plugins-scheduler
+      containers:
+      - command:
+        - /manager
+        - --config=/etc/schedulerconfig/scheduler-config.yaml
+        - --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
+        - --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
+        image: ghcr.io/azure/placement-policy-scheduler-plugins/placement-policy:v0.1.0
+        imagePullPolicy: IfNotPresent
+        name: pp-plugins-scheduler
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - name: scheduler-config
+          mountPath: /etc/schedulerconfig
+          readOnly: true
+        - name: etckubernetes
+          mountPath: /etc/kubernetes
+          readOnly: true
+      hostNetwork: false
+      hostPID: false
+      volumes:
+      - name: scheduler-config
+        configMap:
+          name: pp-scheduler-config
+      - hostPath:
+          path: /etc/kubernetes/
+          type: Directory
+        name: etckubernetes
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      nodeSelector:
+        node-role.kubernetes.io/master: ""

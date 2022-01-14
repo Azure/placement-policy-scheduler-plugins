@@ -16,8 +16,9 @@ A stand alone scheduler that wraps current scheduler and uses [scheduler framewo
 The container images for the scheduler plugin is available in the github container registry.
 
 #### Quick Install
+
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/Azure/placement-policy-scheduler-plugins/main/manifest_staging/deploy/kube-scheduler-configuration.yml
+kubectl apply -f https://raw.githubusercontent.com/Azure/placement-policy-scheduler-plugins/main/deploy/kube-scheduler-configuration.yml
 ```
 
 <details>
@@ -86,6 +87,20 @@ kind create cluster --config https://raw.githubusercontent.com/Azure/placement-p
 ```
 
 >The same node selector `node: want` will be used as node label for `kind-worker` and `kind-worker2`
+
+<details>
+<summary>Node labels</summary>
+
+```bash
+➜ kubectl get nodes -o=custom-columns="NAME:.metadata.name,LABEL:.metadata.labels['node']"
+NAME                 LABEL
+kind-control-plane   <none>
+kind-worker          want
+kind-worker2         want
+kind-worker3         unwant
+```
+
+</details><br/>
 
 - Deploy a `placement policy` CRD
   
