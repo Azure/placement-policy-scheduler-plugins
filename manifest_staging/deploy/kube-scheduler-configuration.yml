@@ -342,8 +342,8 @@ spec:
         - --config=/etc/schedulerconfig/scheduler-config.yaml
         - --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
         - --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
-        image: aramase/placement-policy:v0.1.0-alpha.0
-        imagePullPolicy: Always
+        image: aramase/placement-policy:v0.1.0
+        imagePullPolicy: IfNotPresent
         name: pp-plugins-scheduler
         securityContext:
           privileged: true
