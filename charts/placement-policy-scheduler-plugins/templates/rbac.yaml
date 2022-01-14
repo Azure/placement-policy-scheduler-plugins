@@ -1,0 +1,108 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pp-plugins-scheduler
+rules:
+- apiGroups: ["", "events.k8s.io"]
+  resources: ["events"]
+  verbs: ["create", "patch", "update"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["create"]
+- apiGroups: ["coordination.k8s.io"]
+  resourceNames: ["kube-scheduler"]
+  resources: ["leases"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resourceNames: ["kube-scheduler"]
+  resources: ["endpoints"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["delete", "get", "list", "watch", "update"]
+- apiGroups: [""]
+  resources: ["bindings", "pods/binding"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["pods/status"]
+  verbs: ["patch", "update"]
+- apiGroups: [""]
+  resources: ["replicationcontrollers", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps", "extensions"]
+  resources: ["replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims", "persistentvolumes"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["subjectaccessreviews"]
+  verbs: ["create"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["csinodes", "storageclasses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["placement-policy.scheduling.x-k8s.io"]
+  resources: ["placementpolicies"]
+  verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name:  pp-plugins-scheduler
+subjects:
+- kind: User
+  name: system:kube-scheduler
+  namespace: {{ .Release.Namespace }}
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name:  pp-plugins-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pp-plugins-scheduler-as-kube-scheduler
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: pp-plugins-scheduler
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: extension-apiserver-authentication-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pp-plugins-scheduler-as-kube-scheduler
+subjects:
+  - kind: ServiceAccount
+    name: pp-plugins-scheduler
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: pp-plugins-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pp-plugins-scheduler
+  namespace: {{ .Release.Namespace }}
