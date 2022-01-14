@@ -147,3 +147,13 @@ docker-build: docker-buildx-builder
 		--platform="linux/amd64" \
 		--pull \
 		--tag $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_VERSION) .
+
+## --------------------------------------
+## Release
+## --------------------------------------
+
+.PHONY: promote-staging-manifest
+promote-staging-manifest:
+	@rm -rf deploy charts/placement-policy-scheduler-plugins
+	@cp -r manifest_staging/deploy .
+	@cp -r manifest_staging/charts .
