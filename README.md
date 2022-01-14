@@ -1,13 +1,15 @@
 # Placement Policy Scheduler Plugins
 
-A stand alone scheduler that wraps current scheduler and uses [scheduler framework](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/) with two additional plugins. The scheduler will run side by side with existing kubernetes scheduler and users will have to [specifically specify this scheduler](https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/) to use for their workloads that perform the following:
+Most of cloud environments today provides cluster admins with ephemeral nodes (VMs). These nodes typically cost significantly less but they offer less reliability than their regular counterpart. Cluster admins are often torn between the choice of cost and reliability because of the innate inability of the default Kubernetes scheduler to place some of a specific workload pods on these nodes. Having the entire workload on ephemeral nodes risks the reliability of the workload when the cloud environment stops these nodes.
+
+This scheduler enables cluster admins to offload some configurable percentage of their workloads on these nodes enabling them to decrease the cost of running these pods without affecting its reliability. The scheduler is implemented using the [scheduler framework](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/) with two additional plugins. The scheduler will run side by side with existing kubernetes scheduler and users will have to [specifically specify this scheduler](https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/) to use for their workloads that perform the following:
 
 - A scorer plugin implemented with that will be used in case “best effort” policy enforcement.
   - Extension points implemented: [PreScore](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#pre-score) and [Score](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#score)
 - A filter plugin that will be used in case “force” policy enforcement.
   - Extension points implemented: [PreFilter](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#pre-filter) and [Filter](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#filter)
 
-**WARNING:** This is experimental code. It is not considered production-grade by its developers, nor is it "supported" software.
+**NOTE:** This code is in **ALPHA** status. It is not considered ready for production use.
 
 ## Quick Start
 
@@ -67,7 +69,7 @@ spec:
     targetSize: 40%
 ```
 
-- **enforcementMode**: specifies how the policy will be enforced during scheduler. Values allowed for this field are: 
+- **enforcementMode**: specifies how the policy will be enforced during scheduler. Values allowed for this field are:
   - **BestEffort** (default): the policy will be enforced as best effort (scorer mode).
   - **Strict**: the policy will be forced during scheduling.
 - **nodeSelector**: selects the nodes where the placement policy will apply on according to action.
@@ -75,7 +77,7 @@ spec:
 - **action**: policy placement action that carries the following possible values:
   - **Must**(default): based on the rule below pods must be placed on nodes selected by node selector MustNot: based on the rule pods
   - **MustNot** be placed nodes selected by node selector'
-- **targetSize**: the number or percent of pods that can or cannot be placed on the node. 
+- **targetSize**: the number or percent of pods that can or cannot be placed on the node.
 - **weight**: allows the engine to decide which policy to use when pods match multiple policies.
 
 ### Demo
@@ -83,8 +85,55 @@ spec:
 - Create a [KinD](https://kind.sigs.k8s.io/) cluster with the following config
 
 ```sh
-kind create cluster --config https://raw.githubusercontent.com/Azure/placement-policy-scheduler-plugins/main/test/e2e/kind-config.yaml
+cat <<EOF | kind create cluster --name placement-policy --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+  kubeadmConfigPatches:
+    - |
+      kind: JoinConfiguration
+      nodeRegistration:
+        kubeletExtraArgs:
+          node-labels: "node=want"
+- role: worker
+  kubeadmConfigPatches:
+    - |
+      kind: JoinConfiguration
+      nodeRegistration:
+        kubeletExtraArgs:
+          node-labels: "node=want"
+- role: worker
+  kubeadmConfigPatches:
+    - |
+      kind: JoinConfiguration
+      nodeRegistration:
+        kubeletExtraArgs:
+          node-labels: "node=unwant"
+EOF
 ```
+
+<details>
+<summary>Output</summary>
+
+```bash
+Creating cluster "placement-policy" ...
+ ✓ Ensuring node image (kindest/node:v1.21.1) 🖼
+ ✓ Preparing nodes 📦 📦 📦 📦
+ ✓ Writing configuration 📜
+ ✓ Starting control-plane 🕹️
+ ✓ Installing CNI 🔌
+ ✓ Installing StorageClass 💾
+ ✓ Joining worker nodes 🚜
+Set kubectl context to "kind-placement-policy"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-placement-policy
+
+Have a question, bug, or feature request? Let us know! https://kind.sigs.k8s.io/#community 🙂
+```
+</details><br/>
 
 >The same node selector `node: want` will be used as node label for `kind-worker` and `kind-worker2`
 
@@ -99,6 +148,10 @@ kind-worker          want
 kind-worker2         want
 kind-worker3         unwant
 ```
+
+- Install the placement-policy-scheduler-plugins as a secondary scheduler
+
+Follow the quick start above to install the plugin.
 
 </details><br/>
 
@@ -152,8 +205,8 @@ We will find the nodes which carry the same node selector definded in the CRD ha
 
 - Delete [KinD](https://kind.sigs.k8s.io/) cluster
 
-```sh
-kind delete cluster
+```bash
+kind delete cluster --name placement-policy
 ```
 
 ## Contributing
