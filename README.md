@@ -82,7 +82,7 @@ spec:
 
 ### Demo
 
-#### 1. Create a [KinD](https://kind.sigs.k8s.io/) cluster with the following config
+#### 1. Create a [kind](https://kind.sigs.k8s.io/) cluster with the following config
 
 ```sh
 cat <<EOF | kind create cluster --name placement-policy --config=-
@@ -153,7 +153,7 @@ kind-worker3         unwant
 
 #### 2. Follow the [Install](#install) section to deploy placement-policy-scheduler-plugins as a secondary scheduler
 
-#### 3.Deploy a `PlacementPolicy` CRD
+#### 3. Deploy a `PlacementPolicy` CRD
   
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/Azure/placement-policy-scheduler-plugins/main/examples/v1alpha1_placementpolicy_strict_must.yml
@@ -202,7 +202,7 @@ We will find the nodes which carry the same node selector defined in the strict-
 
 #### 6. Clean up
 
-- Delete [KinD](https://kind.sigs.k8s.io/) cluster
+- Delete [kind](https://kind.sigs.k8s.io/) cluster
 
 ```bash
 kind delete cluster --name placement-policy
