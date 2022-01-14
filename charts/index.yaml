@@ -1,0 +1,15 @@
+apiVersion: v1
+entries:
+  placement-policy-scheduler-plugins:
+  - apiVersion: v2
+    appVersion: v0.1.0
+    created: "2022-01-14T21:09:48.94389065Z"
+    description: A Helm chart for Kubernetes placement policy scheduler plugins
+    digest: 96bd70c91acc6222378a2c3e6a45b5862899d83ae973b8566ce68f5c5b40eda5
+    kubeVersion: <=1.22.2
+    name: placement-policy-scheduler-plugins
+    type: application
+    urls:
+    - https://Azure.github.io/placement-policy-scheduler-plugins/charts/placement-policy-scheduler-plugins-0.1.0.tgz
+    version: 0.1.0
+generated: "2022-01-14T21:09:48.943321047Z"
