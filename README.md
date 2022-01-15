@@ -1,5 +1,8 @@
 # Placement Policy Scheduler Plugins
 
+[![Go Report Card](https://goreportcard.com/badge/Azure/placement-policy-scheduler-plugins)](https://goreportcard.com/report/Azure/placement-policy-scheduler-plugins)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/Azure/placement-policy-scheduler-plugins)
+
 Most of cloud environments today provides cluster admins with ephemeral nodes (VMs). These nodes typically cost significantly less but they offer less reliability than their regular counterpart. Cluster admins are often torn between the choice of cost and reliability because of the innate inability of the default Kubernetes scheduler to place some of a specific workload pods on these nodes. Having the entire workload on ephemeral nodes risks the reliability of the workload when the cloud environment stops these nodes.
 
 This scheduler enables cluster admins to offload some configurable percentage of their workloads on these nodes enabling them to decrease the cost of running these pods without affecting its reliability. The scheduler is implemented using the [scheduler framework](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/) with two additional plugins. The scheduler will run side by side with existing kubernetes scheduler and users will have to [specifically specify this scheduler](https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/) to use for their workloads that perform the following:
