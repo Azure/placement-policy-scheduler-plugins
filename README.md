@@ -9,6 +9,8 @@ This scheduler enables cluster admins to offload some configurable percentage of
 - A filter plugin that will be used in case “force” policy enforcement.
   - Extension points implemented: [PreFilter](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#pre-filter) and [Filter](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#filter)
 
+For more detail, see the [design document](docs/design.md).
+
 **NOTE:** This code is in **ALPHA** status. It is not considered ready for production use.
 
 ## Quick Start
