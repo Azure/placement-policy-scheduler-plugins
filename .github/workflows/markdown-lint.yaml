@@ -1,0 +1,32 @@
+name: Check Markdown
+
+on:  
+  pull_request:
+    paths:
+      - '**.md'
+      - "docs/**"
+
+jobs:
+  lint_docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: "14"
+      - name: Install markdown-link-check
+        run: npm install -g markdown-link-check
+      - name: markdown-link-check
+        run: find . -name \*.md | xargs -I{} markdown-link-check -c .markdownlinkcheck.json {}
+
+  markdown-link-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        # this will only show errors in the output
+        use-quiet-mode: 'yes'
+        # this will show detailed HTTP status for checked links
+        use-verbose-mode: 'yes'
+        config-file: '.github/workflows/markdown.links.config.json'
