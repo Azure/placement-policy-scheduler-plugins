@@ -199,19 +199,20 @@ func TestPlacementPolicyPlugins(t *testing.T) {
 				t.Fatalf("failed to get scaled value from int or percent: %v", err)
 			}
 			for _, p := range podList.Items {
-				// The other pods should be scheduled on the other node.
 				nodeName, err := getNodeName(cs, ns.Name, p.Name)
 				if err != nil {
 					t.Log(err)
 				}
 				if contains(pp.expectedNodes, nodeName) {
 					targetCount++
-				}
-				if targetCount > targetSize {
+				} else {
 					t.Errorf("Pod %s is not assigned to the expected node(s)",
 						p.Name)
 				}
-
+				if targetCount > targetSize {
+					t.Errorf("The scheduler has exceeded the targetSize: %v",
+						targetSize)
+				}
 			}
 			t.Logf("case %v finished", pp.name)
 		})
