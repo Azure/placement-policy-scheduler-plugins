@@ -148,19 +148,6 @@ func TestPlacementPolicyPlugins(t *testing.T) {
 			policy:        MakePlacementPolicy(v1alpha1.EnforcementModeStrict, intstr.FromString("80%"), v1alpha1.ActionMust, "strictmust", ns.Name),
 			expectedNodes: []string{node1, node2},
 		},
-		{
-			name: "Case of Placement Policy StrictMustnot",
-			pods: []*v1.Pod{
-				st.MakePod().Namespace(ns.Name).Name("policymust-1").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
-				st.MakePod().Namespace(ns.Name).Name("policymust-2").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
-				st.MakePod().Namespace(ns.Name).Name("policymust-3").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
-				st.MakePod().Namespace(ns.Name).Name("policymust-4").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
-				st.MakePod().Namespace(ns.Name).Name("policymust-5").Label("app", "nginx").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
-				st.MakePod().Namespace(ns.Name).Name("policymust-6").Label("app", "else").Container(busyBox).ZeroTerminationGracePeriod().Obj(),
-			},
-			policy:        MakePlacementPolicy(v1alpha1.EnforcementModeStrict, intstr.FromString("80%"), v1alpha1.ActionMustNot, "strictmustnot", ns.Name),
-			expectedNodes: []string{node3},
-		},
 	} {
 		t.Run(pp.name, func(t *testing.T) {
 			t.Logf("Start-placementpolicy-test %v", pp.name)
