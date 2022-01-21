@@ -10,24 +10,26 @@ import (
 )
 
 type PolicyInfo struct {
-	Namespace           string
-	Name                string
-	Action              v1alpha1.Action
-	TargetSize          *intstr.IntOrString
-	allQualifyingPods   sets.String
-	podsManagedByPolicy sets.String
-	targetMet           bool
+	Namespace     string
+	Name          string
+	Action        v1alpha1.Action
+	TargetSize    *intstr.IntOrString
+	matchedPods   sets.String
+	qualifiedPods sets.String
+	managedPods   sets.String
+	targetMet     bool
 }
 
 func newPolicyInfo(namespace string, name string, action v1alpha1.Action, targetSize *intstr.IntOrString) *PolicyInfo {
 	policy := &PolicyInfo{
-		Namespace:           namespace,
-		Name:                name,
-		Action:              action,
-		TargetSize:          targetSize,
-		allQualifyingPods:   sets.NewString(),
-		podsManagedByPolicy: sets.NewString(),
-		targetMet:           false,
+		Namespace:     namespace,
+		Name:          name,
+		Action:        action,
+		TargetSize:    targetSize,
+		matchedPods:   sets.NewString(),
+		qualifiedPods: sets.NewString(),
+		managedPods:   sets.NewString(),
+		targetMet:     false,
 	}
 	return policy
 }
@@ -42,24 +44,45 @@ func (p *PolicyInfo) merge(existing *PolicyInfo) *PolicyInfo {
 	existing.Action = p.Action
 	existing.TargetSize = p.TargetSize
 	existing.targetMet = p.targetMet
-	existing.allQualifyingPods = sets.NewString()
-	existing.podsManagedByPolicy = sets.NewString()
 
-	if len(p.allQualifyingPods) > 0 {
-		pods := p.allQualifyingPods.List()
+	tempMatched := sets.NewString()
+	if len(p.matchedPods) > 0 {
+		pods := p.matchedPods.List()
 		for _, pod := range pods {
-			existing.allQualifyingPods.Insert(pod)
+			tempMatched = tempMatched.Insert(pod)
 		}
 	}
+	existing.matchedPods = tempMatched
 
-	if len(p.podsManagedByPolicy) > 0 {
-		pods := p.podsManagedByPolicy.List()
+	tempQualified := sets.NewString()
+	if len(p.qualifiedPods) > 0 {
+		pods := p.qualifiedPods.List()
 		for _, pod := range pods {
-			existing.podsManagedByPolicy.Insert(pod)
+			tempQualified = tempQualified.Insert(pod)
 		}
 	}
+	existing.qualifiedPods = tempQualified
+
+	tempManaged := sets.NewString()
+	if len(p.managedPods) > 0 {
+		pods := p.managedPods.List()
+		for _, pod := range pods {
+			tempManaged = tempManaged.Insert(pod)
+		}
+	}
+	existing.managedPods = tempManaged
 
 	return existing
+}
+
+func (p *PolicyInfo) addMatch(pod *corev1.Pod) error {
+	key, keyError := framework.GetPodKey(pod)
+	if keyError != nil {
+		return keyError
+	}
+
+	p.matchedPods = p.managedPods.Insert(key)
+	return nil
 }
 
 func (p *PolicyInfo) removePodIfPresent(pod *corev1.Pod) error {
@@ -72,10 +95,10 @@ func (p *PolicyInfo) removePodIfPresent(pod *corev1.Pod) error {
 		return nil
 	}
 
-	p.allQualifyingPods = p.allQualifyingPods.Delete(key)
+	p.qualifiedPods = p.qualifiedPods.Delete(key)
 
 	if p.PodIsManagedByPolicy(key) {
-		p.podsManagedByPolicy = p.podsManagedByPolicy.Delete(key)
+		p.managedPods = p.managedPods.Delete(key)
 	}
 
 	err := p.setTargetMet()
@@ -93,56 +116,52 @@ func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
 		return nil
 	}
 
-	p.allQualifyingPods = p.allQualifyingPods.Insert(key)
+	p.matchedPods = p.matchedPods.Delete(key) //once added, don't need to worry about matched anymore
 
-	targetErr := p.setTargetMet()
-	if targetErr != nil {
-		return targetErr
+	p.qualifiedPods = p.qualifiedPods.Insert(key)
+
+	targetError := p.setTargetMet()
+	if targetError != nil {
+		return targetError
 	}
 
-	//if target was met without also adding the pod to the "managed" list, then nothing else to do
+	//if target met, pod doesn't need to be managed
 	if p.targetMet {
 		return nil
 	}
 
-	p.podsManagedByPolicy = p.podsManagedByPolicy.Insert(key)
-
+	p.managedPods = p.managedPods.Insert(key)
 	err := p.setTargetMet()
 	return err
 }
 
-func (p *PolicyInfo) calculateTrueTargetSize() (int, error) {
+func (p *PolicyInfo) setTargetMet() error {
 	specTarget := p.TargetSize
-	lenAllPods := len(p.allQualifyingPods)
+	lenAllPods := len(p.qualifiedPods)
 
-	target, err := intstr.GetScaledValueFromIntOrPercent(specTarget, lenAllPods, false)
+	target, calcError := intstr.GetScaledValueFromIntOrPercent(specTarget, lenAllPods, false)
 
-	if err != nil {
-		return 0, err
+	if calcError != nil {
+		return calcError
 	}
 
 	if p.Action == v1alpha1.ActionMustNot {
 		target = lenAllPods - target
 	}
 
-	return target, nil
-}
-
-func (p *PolicyInfo) setTargetMet() error {
-	target, calcError := p.calculateTrueTargetSize()
-	if calcError != nil {
-		return calcError
-	}
-
-	managedCount := len(p.podsManagedByPolicy)
+	managedCount := len(p.managedPods)
 	p.targetMet = managedCount >= target //since the TargetSize is rounded down, the expectation that it will only meet/equal and never exceed
 	return nil
 }
 
+func (p *PolicyInfo) PodMatchesPolicy(podKey string) bool {
+	return p.matchedPods.Has(podKey)
+}
+
 func (p *PolicyInfo) PodQualifiesForPolicy(podKey string) bool {
-	return p.allQualifyingPods.Has(podKey)
+	return p.qualifiedPods.Has(podKey)
 }
 
 func (p *PolicyInfo) PodIsManagedByPolicy(podKey string) bool {
-	return p.podsManagedByPolicy.Has(podKey)
+	return p.managedPods.Has(podKey)
 }

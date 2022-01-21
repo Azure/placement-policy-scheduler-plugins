@@ -105,19 +105,27 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 		klog.InfoS("no placement policy found for pod", "pod", pod.Name)
 		return framework.NewStatus(framework.Success, "")
 	}
+
+	policy := p.ppMgr.GetPolicyInfo(pp)
+
 	// skip filtering if the enforcement mode is best effort
 	// only filter if the enforcement mode is strict
 	if pp.Spec.EnforcementMode == v1alpha1.EnforcementModeBestEffort {
+		matchedPolicy, err := p.ppMgr.MatchPodToPolicy(ctx, pod, policy)
+		if err != nil {
+			return framework.NewStatus(framework.Error, fmt.Sprintf("failed to match pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
+		}
+		state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, pp, matchedPolicy, Matched))
 		return framework.NewStatus(framework.Success, "")
 	}
 
-	policy, err := p.ppMgr.AddPodToPolicy(ctx, pod, pp)
+	updatedPolicy, err := p.ppMgr.AddPodToPolicy(ctx, pod, policy)
 
 	if err != nil {
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
 	}
 
-	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, pp, policy))
+	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, pp, updatedPolicy, Added))
 	return framework.NewStatus(framework.Success, "")
 }
 
@@ -146,21 +154,28 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 		return framework.NewStatus(framework.Error, "failed to cast state data")
 	}
 
+	// if only "matched" in PreFilter, still a success, so continue
+	if d.status == Matched {
+		state.Write(p.getFilterStateKey(), d)
+		return framework.NewStatus(framework.Success, "")
+	}
+
 	node := nodeInfo.Node()
 	// nodeMatchesLabels is set to true if the node in the current context matches the node selector labels
 	// defined in the placement policy chosen for the pod.
-	nodeMatchesLabels := checkHasLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
+	nodeMatchesLabels := checkHasLabels(node.Labels, d.nodeLabels)
 
 	podKey, keyError := framework.GetPodKey(pod)
 	if keyError != nil {
 		return framework.NewStatus(framework.Error, "pod key not found")
 	}
 
-	policyManagesPod := d.info.PodIsManagedByPolicy(podKey)
+	policyManagesPod := d.policy.PodIsManagedByPolicy(podKey)
 
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
 	if nodeMatchesLabels && policyManagesPod ||
 		!nodeMatchesLabels && !policyManagesPod {
+		state.Write(p.getFilterStateKey(), d)
 		return framework.NewStatus(framework.Success, "")
 	}
 
@@ -174,28 +189,32 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 // 3. Determines the node preference for the pod: node with labels matching placement policy or other
 // 4. Annotate the pod with the node preference and the placement policy.
 func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod *corev1.Pod, nodes []*corev1.Node) *framework.Status {
-	// TODO(aramase) refactor as there is duplicate code in PreFilter and PreScore
-	// get the placement policy that matches pod
-	pp, err := p.ppMgr.GetPlacementPolicyForPod(ctx, pod)
+	data, err := state.Read(p.getFilterStateKey())
 	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to get placement policy for pod %s: %v", pod.Name, err))
+		// if there is no data in state for the pod, then we should skip prescore plugin
+		// as there could be no placement policy for the pod
+		if err == framework.ErrNotFound {
+			return framework.NewStatus(framework.Success, "")
+		}
+		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
 	}
-	if pp == nil {
-		klog.InfoS("no placement policy found for pod", "pod", pod.Name)
+	d, ok := data.(*stateData)
+	if !ok {
+		return framework.NewStatus(framework.Error, "failed to cast state data")
+	}
+
+	//if pod has already been added to the policy in (Pre)Filter, don't need to do anything with scoring
+	if d.status == Added {
 		return framework.NewStatus(framework.Success, "")
 	}
-	// if placement policy enforcement mode is strict, then skip scoring
-	if pp.Spec.EnforcementMode == v1alpha1.EnforcementModeStrict {
-		return framework.NewStatus(framework.Success, "")
-	}
 
-	policy, err := p.ppMgr.AddPodToPolicy(ctx, pod, pp)
+	policy, err := p.ppMgr.AddPodToPolicy(ctx, pod, d.policy)
 
 	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
+		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, d.policy.Name, err))
 	}
 
-	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, pp, policy))
+	state.Write(p.getPreScoreStateKey(), ModifedStateData(pod.Name, policy, d.nodeLabels, Added))
 	return framework.NewStatus(framework.Success, "")
 }
 
@@ -204,7 +223,6 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	data, err := state.Read(p.getPreScoreStateKey())
 	if err != nil {
 		// if there is no data in state for the pod, then we should skip score plugin
-		// as there could be no placement policy for the pod
 		if err == framework.ErrNotFound {
 			return 0, nil
 		}
@@ -214,6 +232,12 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	if !ok {
 		return 0, framework.NewStatus(framework.Error, "failed to cast state data")
 	}
+
+	//this should never happen since the status is set when saving the prescore state
+	if d.status != Added {
+		return 0, nil
+	}
+
 	nodeInfo, err := p.frameworkHandler.SnapshotSharedLister().NodeInfos().Get(nodeName)
 	if err != nil {
 		return 0, framework.NewStatus(framework.Error, fmt.Sprintf("getting node %q from Snapshot: %v", nodeName, err))
@@ -221,13 +245,13 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	node := nodeInfo.Node()
 	// nodeMatchesLabels is set to true if the node in the current context matches the node selector labels
 	// defined in the placement policy chosen for the pod.
-	nodeMatchesLabels := checkHasLabels(node.Labels, d.pp.Spec.NodeSelector.MatchLabels)
+	nodeMatchesLabels := checkHasLabels(node.Labels, d.nodeLabels)
 
 	podKey, keyError := framework.GetPodKey(pod)
 	if keyError != nil {
 		return 0, framework.NewStatus(framework.Error, "pod key not found")
 	}
-	policyManagesPod := d.info.PodIsManagedByPolicy(podKey)
+	policyManagesPod := d.policy.PodIsManagedByPolicy(podKey)
 
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
 	if nodeMatchesLabels && policyManagesPod ||
@@ -274,6 +298,10 @@ func (p *Plugin) NormalizeScore(ctx context.Context, state *framework.CycleState
 
 func (p *Plugin) getPreFilterStateKey() framework.StateKey {
 	return framework.StateKey(fmt.Sprintf("Prefilter-%v", p.Name()))
+}
+
+func (p *Plugin) getFilterStateKey() framework.StateKey {
+	return framework.StateKey(fmt.Sprintf("Filter-%v", p.Name()))
 }
 
 func (p *Plugin) getPreScoreStateKey() framework.StateKey {

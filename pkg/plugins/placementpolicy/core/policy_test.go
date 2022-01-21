@@ -100,8 +100,8 @@ func TestAddPodIfNotPresent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			policyUnderTest := newPolicyInfo("ns", tt.name, tt.action, &tt.target)
-			policyUnderTest.allQualifyingPods = tt.currentQualifiedPods
-			policyUnderTest.podsManagedByPolicy = tt.currentManagedPods
+			policyUnderTest.qualifiedPods = tt.currentQualifiedPods
+			policyUnderTest.managedPods = tt.currentManagedPods
 			policyUnderTest.setTargetMet() //since testing includes "no changes", this must be computed before addition
 			copyOfOriginal := policyUnderTest
 
@@ -109,15 +109,15 @@ func TestAddPodIfNotPresent(t *testing.T) {
 			resultTargetMet := policyUnderTest.targetMet
 
 			if !tt.want.valuesChanged {
-				originalQualifying := len(copyOfOriginal.allQualifyingPods)
-				resultQualifying := len(policyUnderTest.allQualifyingPods)
+				originalQualifying := len(copyOfOriginal.qualifiedPods)
+				resultQualifying := len(policyUnderTest.qualifiedPods)
 				if resultQualifying != originalQualifying {
-					t.Errorf("No changes expected but allQualifyingPods changed. Original: %v Final: %v", originalQualifying, resultQualifying)
+					t.Errorf("No changes expected but qualifiedPods changed. Original: %v Final: %v", originalQualifying, resultQualifying)
 				}
-				originalManaged := len(copyOfOriginal.podsManagedByPolicy)
-				resultManaged := len(policyUnderTest.podsManagedByPolicy)
+				originalManaged := len(copyOfOriginal.managedPods)
+				resultManaged := len(policyUnderTest.managedPods)
 				if resultManaged != originalManaged {
-					t.Errorf("No changes expected but podsManagedByPolicy did. Original: %v Final: %v", originalManaged, resultManaged)
+					t.Errorf("No changes expected but managedPods did. Original: %v Final: %v", originalManaged, resultManaged)
 				}
 				if copyOfOriginal.targetMet != resultTargetMet {
 					t.Errorf("No changes expected but targetMet changed. Original: %v Final: %v", copyOfOriginal.targetMet, resultTargetMet)
@@ -208,20 +208,20 @@ func TestRemovePodIfPresent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			policyUnderTest := newPolicyInfo("ns", tt.name, tt.action, &tt.target)
-			policyUnderTest.allQualifyingPods = tt.currentQualifiedPods
-			policyUnderTest.podsManagedByPolicy = tt.currentManagedPods
+			policyUnderTest.qualifiedPods = tt.currentQualifiedPods
+			policyUnderTest.managedPods = tt.currentManagedPods
 			policyUnderTest.setTargetMet() //since testing includes "no changes", this must be computed before removal
 
 			policyUnderTest.removePodIfPresent(tt.podToRemove)
 
-			actualQualifyingCount := len(policyUnderTest.allQualifyingPods)
+			actualQualifyingCount := len(policyUnderTest.qualifiedPods)
 			if actualQualifyingCount != tt.want.qualifyingCount {
-				t.Errorf("allQualifyingPods length: expected: %v actual: %v", tt.want.qualifyingCount, actualQualifyingCount)
+				t.Errorf("qualifiedPods length: expected: %v actual: %v", tt.want.qualifyingCount, actualQualifyingCount)
 			}
 
-			actualManagedCount := len(policyUnderTest.podsManagedByPolicy)
+			actualManagedCount := len(policyUnderTest.managedPods)
 			if actualManagedCount != tt.want.managedCount {
-				t.Errorf("podsManagedByPolicy length: expected: %v actual: %v", tt.want.managedCount, actualManagedCount)
+				t.Errorf("managedPods length: expected: %v actual: %v", tt.want.managedCount, actualManagedCount)
 			}
 
 			if policyUnderTest.targetMet != tt.want.targetMet {
@@ -275,22 +275,22 @@ func TestPolicyInfoMerge(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			existingPolicy := &PolicyInfo{
-				Namespace:           policyNamespace,
-				Name:                policyName,
-				Action:              tt.existing.action,
-				TargetSize:          &tt.existing.target,
-				allQualifyingPods:   tt.existing.qualifiedPods,
-				podsManagedByPolicy: tt.existing.managedPods,
+				Namespace:     policyNamespace,
+				Name:          policyName,
+				Action:        tt.existing.action,
+				TargetSize:    &tt.existing.target,
+				qualifiedPods: tt.existing.qualifiedPods,
+				managedPods:   tt.existing.managedPods,
 			}
 			existingPolicy.setTargetMet()
 
 			updatedPolicy := &PolicyInfo{
-				Namespace:           policyNamespace,
-				Name:                policyName,
-				Action:              tt.updated.action,
-				TargetSize:          &tt.updated.target,
-				allQualifyingPods:   tt.updated.qualifiedPods,
-				podsManagedByPolicy: tt.updated.managedPods,
+				Namespace:     policyNamespace,
+				Name:          policyName,
+				Action:        tt.updated.action,
+				TargetSize:    &tt.updated.target,
+				qualifiedPods: tt.updated.qualifiedPods,
+				managedPods:   tt.updated.managedPods,
 			}
 			updatedPolicy.setTargetMet()
 
@@ -305,31 +305,31 @@ func TestPolicyInfoMerge(t *testing.T) {
 				t.Errorf("Unexpected TargetSize value - existing: %v, updated: %v, final: %v", existingPolicy.TargetSize, updatedPolicy.TargetSize, final.TargetSize)
 			}
 
-			finalQualifying := final.allQualifyingPods.List()
+			finalQualifying := final.qualifiedPods.List()
 			for _, qp := range finalQualifying {
-				if !updatedPolicy.allQualifyingPods.Has(qp) {
-					t.Errorf("Unexpected value in allQualifyingPods - value %v exists in final and not in updated", qp)
+				if !updatedPolicy.qualifiedPods.Has(qp) {
+					t.Errorf("Unexpected value in qualifiedPods - value %v exists in final and not in updated", qp)
 				}
 			}
 
-			updatedQualifying := updatedPolicy.allQualifyingPods.List()
+			updatedQualifying := updatedPolicy.qualifiedPods.List()
 			for _, up := range updatedQualifying {
-				if !final.allQualifyingPods.Has(up) {
-					t.Errorf("Unexpected value in allQualifyingPods - value %v exists in updated and not in final", up)
+				if !final.qualifiedPods.Has(up) {
+					t.Errorf("Unexpected value in qualifiedPods - value %v exists in updated and not in final", up)
 				}
 			}
 
-			finalManaged := final.podsManagedByPolicy.List()
+			finalManaged := final.managedPods.List()
 			for _, qp := range finalManaged {
-				if !updatedPolicy.podsManagedByPolicy.Has(qp) {
-					t.Errorf("Unexpected value in podsManagedByPolicy - value %v exists in final and not in updated", qp)
+				if !updatedPolicy.managedPods.Has(qp) {
+					t.Errorf("Unexpected value in managedPods - value %v exists in final and not in updated", qp)
 				}
 			}
 
-			updatedManaged := updatedPolicy.podsManagedByPolicy.List()
+			updatedManaged := updatedPolicy.managedPods.List()
 			for _, up := range updatedManaged {
-				if !final.podsManagedByPolicy.Has(up) {
-					t.Errorf("Unexpected value in podsManagedByPolicy - value %v exists in updated and not in final", up)
+				if !final.managedPods.Has(up) {
+					t.Errorf("Unexpected value in managedPods - value %v exists in updated and not in final", up)
 				}
 			}
 

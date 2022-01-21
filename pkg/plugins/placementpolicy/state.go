@@ -7,17 +7,35 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
+type PodPolicyStatus int16
+
+const (
+	Matched PodPolicyStatus = iota
+	Added
+)
+
 type stateData struct {
-	name string
-	pp   *v1alpha1.PlacementPolicy
-	info *core.PolicyInfo
+	name       string
+	policy     *core.PolicyInfo
+	nodeLabels map[string]string
+	status     PodPolicyStatus
 }
 
-func NewStateData(name string, pp *v1alpha1.PlacementPolicy, info *core.PolicyInfo) framework.StateData {
+func NewStateData(name string, pp *v1alpha1.PlacementPolicy, info *core.PolicyInfo, status PodPolicyStatus) framework.StateData {
 	return &stateData{
-		name: name,
-		pp:   pp,
-		info: info,
+		name:       name,
+		policy:     info,
+		nodeLabels: pp.Spec.NodeSelector.MatchLabels,
+		status:     status,
+	}
+}
+
+func ModifedStateData(name string, info *core.PolicyInfo, nodeLabels map[string]string, status PodPolicyStatus) framework.StateData {
+	return &stateData{
+		name:       name,
+		policy:     info,
+		nodeLabels: nodeLabels,
+		status:     status,
 	}
 }
 
