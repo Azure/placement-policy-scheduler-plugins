@@ -18,9 +18,9 @@ import (
 type Manager interface {
 	GetPlacementPolicyForPod(context.Context, *corev1.Pod) (*v1alpha1.PlacementPolicy, error)
 	GetPolicyInfo(*v1alpha1.PlacementPolicy) *PolicyInfo
-	MatchPodToPolicy(context.Context, *corev1.Pod, *PolicyInfo) (*PolicyInfo, error)
-	AddPodToPolicy(context.Context, *corev1.Pod, *PolicyInfo) (*PolicyInfo, error)
-	RemovePodFromPolicy(*corev1.Pod) error
+	MatchPod(context.Context, *corev1.Pod, *PolicyInfo) (*PolicyInfo, error)
+	AddPod(context.Context, *corev1.Pod, *PolicyInfo) (*PolicyInfo, error)
+	RemovePod(*corev1.Pod) error
 }
 
 type PlacementPolicyManager struct {
@@ -101,7 +101,7 @@ const (
 	Remove
 )
 
-func (m *PlacementPolicyManager) MatchPodToPolicy(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
+func (m *PlacementPolicyManager) MatchPod(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
 	matchError := policy.addMatch(pod)
 	if matchError != nil {
 		return nil, matchError
@@ -111,7 +111,7 @@ func (m *PlacementPolicyManager) MatchPodToPolicy(ctx context.Context, pod *core
 	return policy, nil
 }
 
-func (m *PlacementPolicyManager) AddPodToPolicy(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
+func (m *PlacementPolicyManager) AddPod(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
 	addError := policy.addPodIfNotPresent(pod)
 	if addError != nil {
 		return nil, addError
@@ -121,7 +121,7 @@ func (m *PlacementPolicyManager) AddPodToPolicy(ctx context.Context, pod *corev1
 	return policy, nil
 }
 
-func (m *PlacementPolicyManager) RemovePodFromPolicy(pod *corev1.Pod) error {
+func (m *PlacementPolicyManager) RemovePod(pod *corev1.Pod) error {
 	key, keyError := framework.GetPodKey(pod)
 	if keyError != nil {
 		return keyError
@@ -163,9 +163,6 @@ func (m *PlacementPolicyManager) updatePolicies(policy *PolicyInfo, act PodActio
 			delete(m.policies[namespace], name)
 			return
 		}
-
-		m.policies[namespace][name] = policy
-		return
 	}
 
 	existing := m.policies[namespace][name]

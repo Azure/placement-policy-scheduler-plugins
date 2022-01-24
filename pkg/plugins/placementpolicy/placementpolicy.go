@@ -65,10 +65,10 @@ func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) 
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {
 				case *corev1.Pod:
-					return assignedPod(t)
+					return true
 				case cache.DeletedFinalStateUnknown:
 					if pod, ok := t.Obj.(*corev1.Pod); ok {
-						return assignedPod(pod)
+						return true
 					}
 					return false
 				default:
@@ -111,7 +111,7 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 	// skip filtering if the enforcement mode is best effort
 	// only filter if the enforcement mode is strict
 	if pp.Spec.EnforcementMode == v1alpha1.EnforcementModeBestEffort {
-		matchedPolicy, err := p.ppMgr.MatchPodToPolicy(ctx, pod, policy)
+		matchedPolicy, err := p.ppMgr.MatchPod(ctx, pod, policy)
 		if err != nil {
 			return framework.NewStatus(framework.Error, fmt.Sprintf("failed to match pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
 		}
@@ -119,7 +119,7 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 		return framework.NewStatus(framework.Success, "")
 	}
 
-	updatedPolicy, err := p.ppMgr.AddPodToPolicy(ctx, pod, policy)
+	updatedPolicy, err := p.ppMgr.AddPod(ctx, pod, policy)
 
 	if err != nil {
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
@@ -208,7 +208,7 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 		return framework.NewStatus(framework.Success, "")
 	}
 
-	policy, err := p.ppMgr.AddPodToPolicy(ctx, pod, d.policy)
+	policy, err := p.ppMgr.AddPod(ctx, pod, d.policy)
 
 	if err != nil {
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, d.policy.Name, err))
@@ -380,18 +380,13 @@ func groupPodsBasedOnNodePreference(podList []*corev1.Pod, pod *corev1.Pod, node
 	return podsOnNodeWithMatchingLabels
 }
 
-// assignedPod selects pods that are assigned (scheduled and running).
-func assignedPod(pod *corev1.Pod) bool {
-	return len(pod.Spec.NodeName) != 0
-}
-
 func (p *Plugin) RemovePodFromPolicy(obj interface{}) {
 	pod := obj.(*corev1.Pod)
 
 	p.Lock()
 	defer p.Unlock()
 
-	removeError := p.ppMgr.RemovePodFromPolicy(pod)
+	removeError := p.ppMgr.RemovePod(pod)
 	if removeError != nil {
 		klog.ErrorS(removeError, "error removing pod from placement policy")
 	}
