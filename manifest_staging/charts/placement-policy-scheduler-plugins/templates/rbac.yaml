@@ -1,8 +1,11 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: pp-plugins-scheduler
+  name: system:pp-plugins-scheduler
 rules:
+- apiGroups: [""]
+  resources: ["namespaces", "configmaps"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["", "events.k8s.io"]
   resources: ["events"]
   verbs: ["create", "patch", "update"]
@@ -54,7 +57,7 @@ rules:
   resources: ["subjectaccessreviews"]
   verbs: ["create"]
 - apiGroups: ["storage.k8s.io"]
-  resources: ["csinodes", "storageclasses"]
+  resources: ["*"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["placement-policy.scheduling.x-k8s.io"]
   resources: ["placementpolicies"]
@@ -71,9 +74,24 @@ subjects:
   apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
-  name:  pp-plugins-scheduler
+  name:  system:pp-plugins-scheduler
   apiGroup: rbac.authorization.k8s.io
+
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pp-plugins-scheduler:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: pp-plugins-scheduler
+    namespace: {{ .Release.Namespace }}
+---
+# To be able to to retrieve the PlacementPolicy objects, the following role has been added
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -98,7 +116,7 @@ subjects:
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: pp-plugins-scheduler
+  name: system:pp-plugins-scheduler
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1

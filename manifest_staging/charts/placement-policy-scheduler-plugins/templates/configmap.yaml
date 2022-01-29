@@ -9,8 +9,6 @@ data:
     kind: KubeSchedulerConfiguration
     leaderElection:
       leaderElect: false
-    clientConnection:
-      kubeconfig: /etc/kubernetes/scheduler.conf
     profiles:
     - schedulerName: placement-policy-plugins-scheduler
       plugins:

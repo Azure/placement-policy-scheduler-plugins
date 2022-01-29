@@ -2,6 +2,6 @@ apiVersion: v2
 name: placement-policy-scheduler-plugins
 description: A Helm chart for Kubernetes placement policy scheduler plugins
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: v0.1.0
 kubeVersion: "<=1.22.2"
