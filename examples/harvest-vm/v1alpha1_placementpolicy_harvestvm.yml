@@ -1,0 +1,17 @@
+apiVersion: placement-policy.scheduling.x-k8s.io/v1alpha1
+kind: PlacementPolicy
+metadata:
+  name: harvest-strict-must
+spec:
+  weight: 100
+  enforcementMode: Strict
+  podSelector:
+    matchLabels:
+      app: nginx
+  nodeSelector:
+    matchLabels:
+      # instansce type can be one of the following( Harvest_E2s_v3, Harvest_E4s_v3, Harvest_E8s_v3)
+      node.kubernetes.io/instance-type: Harvest_E2s_v3
+  policy:
+    action: Must
+    targetSize: 40%
