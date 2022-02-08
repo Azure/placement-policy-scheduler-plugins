@@ -76,7 +76,7 @@ func (p *PolicyInfo) merge(existing *PolicyInfo) *PolicyInfo {
 }
 
 func (p *PolicyInfo) addMatch(pod *corev1.Pod) error {
-	key, keyError := framework.GetPodKey(pod)
+	key, err := framework.GetPodKey(pod)
 	if keyError != nil {
 		return keyError
 	}
