@@ -190,8 +190,6 @@ data:
     kind: KubeSchedulerConfiguration
     leaderElection:
       leaderElect: false
-    clientConnection:
-      kubeconfig: /etc/kubernetes/scheduler.conf
     profiles:
     - schedulerName: placement-policy-plugins-scheduler
       plugins:
@@ -211,8 +209,11 @@ data:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: pp-plugins-scheduler
+  name: system:pp-plugins-scheduler
 rules:
+- apiGroups: [""]
+  resources: ["namespaces", "configmaps"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["", "events.k8s.io"]
   resources: ["events"]
   verbs: ["create", "patch", "update"]
@@ -264,7 +265,7 @@ rules:
   resources: ["subjectaccessreviews"]
   verbs: ["create"]
 - apiGroups: ["storage.k8s.io"]
-  resources: ["csinodes", "storageclasses"]
+  resources: ["*"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["placement-policy.scheduling.x-k8s.io"]
   resources: ["placementpolicies"]
@@ -281,8 +282,21 @@ subjects:
   apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
-  name:  pp-plugins-scheduler
+  name:  system:pp-plugins-scheduler
   apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pp-plugins-scheduler:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: pp-plugins-scheduler
+    namespace: kube-system
 ---
 # To be able to to retrieve the PlacementPolicy objects, the following role has been added
 apiVersion: rbac.authorization.k8s.io/v1
@@ -309,7 +323,7 @@ subjects:
     namespace: kube-system
 roleRef:
   kind: ClusterRole
-  name: pp-plugins-scheduler
+  name: system:pp-plugins-scheduler
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1
@@ -340,8 +354,6 @@ spec:
       - command:
         - /manager
         - --config=/etc/schedulerconfig/scheduler-config.yaml
-        - --authentication-kubeconfig=/etc/kubernetes/scheduler.conf
-        - --authorization-kubeconfig=/etc/kubernetes/scheduler.conf
         image: ghcr.io/azure/placement-policy-scheduler-plugins/placement-policy:v0.1.0
         imagePullPolicy: IfNotPresent
         name: pp-plugins-scheduler
@@ -352,22 +364,9 @@ spec:
         - name: scheduler-config
           mountPath: /etc/schedulerconfig
           readOnly: true
-        - name: etckubernetes
-          mountPath: /etc/kubernetes
-          readOnly: true
       hostNetwork: false
       hostPID: false
       volumes:
       - name: scheduler-config
         configMap:
           name: pp-scheduler-config
-      - hostPath:
-          path: /etc/kubernetes/
-          type: Directory
-        name: etckubernetes
-      tolerations:
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
-      nodeSelector:
-        node-role.kubernetes.io/master: ""
