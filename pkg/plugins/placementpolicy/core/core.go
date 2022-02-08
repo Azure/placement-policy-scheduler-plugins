@@ -102,7 +102,7 @@ const (
 )
 
 func (m *PlacementPolicyManager) MatchPod(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
-	matchError := policy.addMatch(pod)
+	err := policy.addMatch(pod)
 	if matchError != nil {
 		return nil, matchError
 	}
