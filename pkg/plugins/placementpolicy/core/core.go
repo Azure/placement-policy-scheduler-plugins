@@ -68,29 +68,15 @@ func (m *PlacementPolicyManager) filterPlacementPolicyList(ppList []*v1alpha1.Pl
 	return filteredPPList
 }
 
+// GetPolicyInfo returns the PolicyInfo held in-memory for the given placement policy
 func (m *PlacementPolicyManager) GetPolicyInfo(pp *v1alpha1.PlacementPolicy) *PolicyInfo {
 	policyNamespace := pp.Namespace
 	policyName := pp.Name
 	corePolicy := pp.Spec.Policy
+	action := corePolicy.Action
+	targetSize := corePolicy.TargetSize
 
-	namespacePolicies, namespaceExists := m.policies[policyNamespace]
-
-	if namespaceExists {
-		policy, policyExists := namespacePolicies[policyName]
-
-		if policyExists {
-			return policy
-		}
-
-		created := newPolicyInfo(policyNamespace, policyName, corePolicy.Action, corePolicy.TargetSize)
-		m.policies[policyNamespace][policyName] = created
-		return created
-	}
-
-	m.policies[policyNamespace] = make(map[string]*PolicyInfo)
-	created := newPolicyInfo(policyNamespace, policyName, corePolicy.Action, corePolicy.TargetSize)
-	m.policies[policyNamespace][policyName] = created
-	return created
+	return m.policies.GetPolicy(policyNamespace, policyName, action, targetSize)
 }
 
 type PodAction int16
@@ -101,70 +87,74 @@ const (
 	Remove
 )
 
+// MatchPod attaches the provided pod to the provided PolicyInfo as a match
 func (m *PlacementPolicyManager) MatchPod(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
 	err := policy.addMatch(pod)
-	if matchError != nil {
-		return nil, matchError
+	if err != nil {
+		return nil, err
 	}
 
 	m.updatePolicies(policy, Match)
 	return policy, nil
 }
 
+// AddPod adds the provided pod to the provided PolicyInfo and calculates whether target was met
 func (m *PlacementPolicyManager) AddPod(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
-	addError := policy.addPodIfNotPresent(pod)
-	if addError != nil {
-		return nil, addError
+	err := policy.addPodIfNotPresent(pod)
+	if err != nil {
+		return nil, err
 	}
 
 	m.updatePolicies(policy, Add)
 	return policy, nil
 }
 
+// RemovePod removes the provided pod from PolicyInfo held in-memory and re-calculates policy's status (if applicable)
 func (m *PlacementPolicyManager) RemovePod(pod *corev1.Pod) error {
-	key, keyError := framework.GetPodKey(pod)
-	if keyError != nil {
-		return keyError
+	key, err := framework.GetPodKey(pod)
+	if err != nil {
+		return err
 	}
 
 	podNamespace := pod.Namespace
-	ppList := m.policies[podNamespace]
+	ppList := m.policies.GetPoliciesByNamespace(podNamespace)
 
-	if ppList != nil {
-		var matchingPolicy *PolicyInfo
+	if ppList == nil {
+		return nil
+	}
 
-		for _, pp := range ppList {
-			if pp.PodQualifiesForPolicy(key) {
-				matchingPolicy = pp
-				break
-			}
+	var matchingPolicy *PolicyInfo
+
+	for _, pp := range ppList {
+		if pp.PodQualifiesForPolicy(key) {
+			matchingPolicy = pp
+			break
+		}
+	}
+
+	if matchingPolicy != nil {
+		err := matchingPolicy.removePodIfPresent(pod)
+		if err != nil {
+			return err
 		}
 
-		if matchingPolicy != nil {
-			removeError := matchingPolicy.removePodIfPresent(pod)
-			if removeError != nil {
-				return removeError
-			}
-
-			m.updatePolicies(matchingPolicy, Remove)
-		}
+		m.updatePolicies(matchingPolicy, Remove)
 	}
 	return nil
 }
 
-func (m *PlacementPolicyManager) updatePolicies(policy *PolicyInfo, act PodAction) {
+func (m *PlacementPolicyManager) updatePolicies(policy *PolicyInfo, action PodAction) {
 	namespace := policy.Namespace
-	name := policy.Name
 
-	if act == Remove {
+	if action == Remove {
 		qualifyingCount := len(policy.qualifiedPods)
 
 		if qualifyingCount == 0 {
-			delete(m.policies[namespace], name)
+			name := policy.Name
+			m.policies.RemovePolicy(namespace, name)
 			return
 		}
 	}
 
-	existing := m.policies[namespace][name]
-	m.policies[namespace][name] = policy.merge(existing)
+	m.policies.UpdatePolicy(namespace, policy)
 }
