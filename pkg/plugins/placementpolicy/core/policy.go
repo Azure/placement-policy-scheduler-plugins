@@ -11,13 +11,21 @@ import (
 )
 
 type PolicyInfo struct {
+	//policy's namespace - from CRD
 	Namespace     string
+	//policy's name - from CRD
 	Name          string
+	//policy's action - from CRD
 	Action        v1alpha1.Action
+	//policy's target - from CRD
 	TargetSize    *intstr.IntOrString
+	//collection of pods matched if the policy is `BestEffort`; **not** used for computation
 	matchedPods   sets.String
+	//collection of pods that could be managed by the policy; used for computation as the **total**
 	qualifiedPods sets.String
+	//collection of pods assigned to a node according to the policy; used for computation
 	managedPods   sets.String
+	//does the ratio of managed-to-qualified meet the `TargetSize`
 	targetMet     bool
 }
 
@@ -37,6 +45,7 @@ func newPolicyInfo(namespace string, name string, action v1alpha1.Action, target
 
 type PolicyInfos struct {
 	sync.RWMutex
+	//map (by `Namespace`) of map (by `Name`) of `PolicyInfo`
 	internal map[string]map[string]*PolicyInfo
 }
 
