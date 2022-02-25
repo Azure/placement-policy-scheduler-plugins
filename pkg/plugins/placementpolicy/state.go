@@ -12,6 +12,7 @@ type PodPolicyStatus int16
 const (
 	Matched PodPolicyStatus = iota
 	Added
+	NoPolicy
 )
 
 type stateData struct {
@@ -30,12 +31,20 @@ func NewStateData(name string, pp *v1alpha1.PlacementPolicy, info *core.PolicyIn
 	}
 }
 
-func ModifedStateData(name string, info *core.PolicyInfo, nodeLabels map[string]string, status PodPolicyStatus) framework.StateData {
+func ModifiedStateData(name string, info *core.PolicyInfo, nodeLabels map[string]string, status PodPolicyStatus) framework.StateData {
 	return &stateData{
 		name:       name,
 		policy:     info,
 		nodeLabels: nodeLabels,
 		status:     status,
+	}
+}
+
+func EmptyStateData(name string) framework.StateData {
+	return &stateData{
+		name:       name,
+		nodeLabels: map[string]string{},
+		status:     NoPolicy,
 	}
 }
 

@@ -140,9 +140,9 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 
 	data, err := state.Read(p.getPreFilterStateKey())
 	if err != nil {
-		// if there is no data in state for the pod, then we should skip filter plugin
-		// as there could be no placement policy for the pod
+		// no state means no policy, skip Filter and move on to PreScore
 		if err == framework.ErrNotFound {
+			state.Write(p.getFilterStateKey(), EmptyStateData(pod.Name))
 			return framework.NewStatus(framework.Success, "")
 		}
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
@@ -152,8 +152,8 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 		return framework.NewStatus(framework.Error, "failed to cast state data")
 	}
 
-	// if only "matched" in PreFilter, stop filtering
-	if d.status == Matched {
+	// if not "Added" (so "Matched" or "NoPolicy"), skip Filter
+	if d.status != Added {
 		state.Write(p.getFilterStateKey(), d)
 		return framework.NewStatus(framework.Success, "")
 	}
@@ -187,34 +187,49 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 // 3. Determines the node preference for the pod: node with labels matching placement policy or other
 // 4. Annotate the pod with the node preference and the placement policy.
 func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod *corev1.Pod, nodes []*corev1.Node) *framework.Status {
+	var policy *core.PolicyInfo
+	var nodeLabels map[string]string
+
 	data, err := state.Read(p.getFilterStateKey())
 	if err != nil {
-		if err == framework.ErrNotFound {
-			// if there is no state entry, need to repeat some of the steps of PreFilter to check for policy since it could be that PreFilter/Filter were disabled
+		if err != framework.ErrNotFound {
+			return framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
+		}
 
-			// TODO IMPLEMENT CHECKING FOR POLICY MATCH
+		// if there is no state entry, Filter is disabled or was otherwise skipped; see if there is a valid policy
+		pp, err := p.ppMgr.GetPlacementPolicyForPod(ctx, pod)
+		if err != nil {
+			return framework.NewStatus(framework.Error, fmt.Sprintf("failed to get placement policy for pod %s: %v", pod.Name, err))
+		}
 
+		// if no policy or found policy is Strict, skip scoring
+		if pp == nil || pp.Spec.EnforcementMode == v1alpha1.EnforcementModeStrict {
 			return framework.NewStatus(framework.Success, "")
 		}
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
-	}
-	d, ok := data.(*stateData)
-	if !ok {
-		return framework.NewStatus(framework.Error, "failed to cast state data")
+
+		policy = p.ppMgr.GetPolicyInfo(pp)
+		nodeLabels = pp.Spec.NodeSelector.MatchLabels
+	} else {
+		d, ok := data.(*stateData)
+		if !ok {
+			return framework.NewStatus(framework.Error, "failed to cast state data")
+		}
+
+		// if pod has already been added to the policy in (Pre)Filter or no policy, don't need to do anything with scoring
+		if d.status != Matched {
+			return framework.NewStatus(framework.Success, "")
+		}
+
+		policy = d.policy
+		nodeLabels = d.nodeLabels
 	}
 
-	// if pod has already been added to the policy in (Pre)Filter, don't need to do anything with scoring
-	if d.status == Added {
-		return framework.NewStatus(framework.Success, "")
-	}
-
-	policy, err := p.ppMgr.AddPod(ctx, pod, d.policy)
-
+	updatedPolicy, err := p.ppMgr.AddPod(ctx, pod, policy)
 	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, d.policy.Name, err))
+		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, policy.Name, err))
 	}
 
-	state.Write(p.getPreScoreStateKey(), ModifedStateData(pod.Name, policy, d.nodeLabels, Added))
+	state.Write(p.getPreScoreStateKey(), ModifiedStateData(pod.Name, updatedPolicy, nodeLabels, Added))
 	return framework.NewStatus(framework.Success, "")
 }
 
