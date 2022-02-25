@@ -172,7 +172,7 @@ func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
 		return keyError
 	}
 
-	//if pod is already in the list, do nothing
+	// if pod is already in the list, do nothing
 	if p.PodQualifiesForPolicy(key) {
 		return nil
 	}
