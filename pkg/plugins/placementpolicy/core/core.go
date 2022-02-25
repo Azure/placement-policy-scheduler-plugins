@@ -18,7 +18,6 @@ import (
 type Manager interface {
 	GetPlacementPolicyForPod(context.Context, *corev1.Pod) (*v1alpha1.PlacementPolicy, error)
 	GetPolicyInfo(*v1alpha1.PlacementPolicy) *PolicyInfo
-	MatchPod(context.Context, *corev1.Pod, *PolicyInfo) (*PolicyInfo, error)
 	AddPod(context.Context, *corev1.Pod, *PolicyInfo) (*PolicyInfo, error)
 	RemovePod(*corev1.Pod) error
 }
@@ -86,17 +85,6 @@ const (
 	Add
 	Remove
 )
-
-// MatchPod attaches the provided pod to the provided PolicyInfo as a match
-func (m *PlacementPolicyManager) MatchPod(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
-	err := policy.addMatch(pod)
-	if err != nil {
-		return nil, err
-	}
-
-	m.updatePolicies(policy, Match)
-	return policy, nil
-}
 
 // AddPod adds the provided pod to the provided PolicyInfo and calculates whether target was met
 func (m *PlacementPolicyManager) AddPod(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {

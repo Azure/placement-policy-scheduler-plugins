@@ -19,8 +19,6 @@ type PolicyInfo struct {
 	Action v1alpha1.Action
 	// PlacementPolicy target - from CRD
 	TargetSize *intstr.IntOrString
-	// collection of pods matched if the policy is `BestEffort`; **not** used for computation
-	matchedPods sets.String
 	// collection of pods that could be managed by the policy; used for computation as the **total**
 	qualifiedPods sets.String
 	// collection of pods assigned to a node according to the policy; used for computation
@@ -35,7 +33,6 @@ func newPolicyInfo(namespace string, name string, action v1alpha1.Action, target
 		Name:          name,
 		Action:        action,
 		TargetSize:    targetSize,
-		matchedPods:   sets.NewString(),
 		qualifiedPods: sets.NewString(),
 		managedPods:   sets.NewString(),
 		targetMet:     false,
@@ -124,12 +121,6 @@ func (p *PolicyInfo) merge(existing *PolicyInfo) *PolicyInfo {
 	existing.TargetSize = p.TargetSize
 	existing.targetMet = p.targetMet
 
-	tempMatched := sets.NewString()
-	if len(p.matchedPods) > 0 {
-		tempMatched = tempMatched.Insert(p.matchedPods.List()...)
-	}
-	existing.matchedPods = tempMatched
-
 	tempQualified := sets.NewString()
 	if len(p.qualifiedPods) > 0 {
 		tempQualified = tempQualified.Insert(p.qualifiedPods.List()...)
@@ -143,17 +134,6 @@ func (p *PolicyInfo) merge(existing *PolicyInfo) *PolicyInfo {
 	existing.managedPods = tempManaged
 
 	return existing
-}
-
-// addMatch adds the pod to the policy's matchedPods collection
-func (p *PolicyInfo) addMatch(pod *corev1.Pod) error {
-	key, err := framework.GetPodKey(pod)
-	if err != nil {
-		return err
-	}
-
-	p.matchedPods = p.matchedPods.Insert(key)
-	return nil
 }
 
 // removePodIfPresent removes the pod from the policy's qualifiedPods and managedPods collections as appropriate
@@ -188,12 +168,6 @@ func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
 		return nil
 	}
 
-	// if policy is `BestEffort`, this will be true
-	if p.PodMatchesPolicy(key) {
-		// once added, don't need to worry about matched anymore
-		p.matchedPods = p.matchedPods.Delete(key)
-	}
-
 	p.qualifiedPods = p.qualifiedPods.Insert(key)
 
 	err = p.setTargetMet()
@@ -226,11 +200,6 @@ func (p *PolicyInfo) setTargetMet() error {
 	managedCount := len(p.managedPods)
 	p.targetMet = managedCount >= target // since the TargetSize is rounded down, the expectation that it will only meet/equal and never exceed
 	return nil
-}
-
-// PodMatchesPolicy returns whether or not the pod key is matched to the BestEffort policy during Filter
-func (p *PolicyInfo) PodMatchesPolicy(podKey string) bool {
-	return p.matchedPods.Has(podKey)
 }
 
 // PodQualifiesForPolicy returns whether or not the pod key is in the list of qualifying pods
