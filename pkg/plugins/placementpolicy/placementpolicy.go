@@ -2,6 +2,7 @@ package placementpolicy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -39,7 +40,6 @@ var _ framework.ScorePlugin = &Plugin{}
 
 // New initializes and returns a new PlacementPolicy plugin.
 func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-
 	ppClient := ppclientset.NewForConfigOrDie(handle.KubeConfig())
 	ppInformerFactory := ppinformers.NewSharedInformerFactory(ppClient, 0)
 	ppInformer := ppInformerFactory.Placementpolicy().V1alpha1().PlacementPolicies()
@@ -94,11 +94,11 @@ func (p *Plugin) Name() string {
 // 4. Annotate the pod with the node preference and the placement policy.
 func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod *corev1.Pod) *framework.Status {
 	// get the placement policy that matches pod
-	policy, enforcement, nodeLabels, err := getPolicyForPod(ctx, p.ppMgr, pod)
+	policy, enforcement, nodeLabels, err := p.getPolicyForPod(ctx, pod)
 	if err != nil {
 		return framework.AsStatus(err)
-	} 
-	
+	}
+
 	if policy == nil {
 		klog.InfoS("no placement policy found for pod", "pod", pod.Name)
 		return framework.NewStatus(framework.Success, "")
@@ -112,10 +112,10 @@ func (p *Plugin) PreFilter(ctx context.Context, state *framework.CycleState, pod
 
 	updatedPolicy, err := p.ppMgr.AddPod(ctx, pod, policy)
 	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
+		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, policy.Name, err))
 	}
 
-	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, updatedPolicy, &nodeLabels))
+	state.Write(p.getPreFilterStateKey(), NewStateData(pod.Name, updatedPolicy, nodeLabels))
 	return framework.NewStatus(framework.Success, "")
 }
 
@@ -132,8 +132,8 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 
 	d, err := readState(state, p.getPreFilterStateKey())
 	if err != nil {
-		// no state means no policy, skip Filter and move on to PreScore
-		if err == framework.ErrNotFound {
+		// no state means no policy, skip Filter
+		if errors.Is(err, framework.ErrNotFound) {
 			return framework.NewStatus(framework.Success, "")
 		}
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
@@ -168,11 +168,11 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 // 4. Annotate the pod with the node preference and the placement policy.
 func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod *corev1.Pod, nodes []*corev1.Node) *framework.Status {
 	// get the placement policy that matches pod
-	policy, enforcement, nodeLabels, err := getPolicyForPod(ctx, p.ppMgr, pod)
+	policy, enforcement, nodeLabels, err := p.getPolicyForPod(ctx, pod)
 	if err != nil {
 		return framework.AsStatus(err)
-	} 
-	
+	}
+
 	if policy == nil {
 		klog.InfoS("no placement policy found for pod", "pod", pod.Name)
 		return framework.NewStatus(framework.Success, "")
@@ -186,10 +186,10 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 
 	updatedPolicy, err := p.ppMgr.AddPod(ctx, pod, policy)
 	if err != nil {
-		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, pp.Name, err))
+		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to associate pod %s with placement policy %s: %v", pod.Name, policy.Name, err))
 	}
 
-	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, updatedPolicy, &nodeLabels))
+	state.Write(p.getPreScoreStateKey(), NewStateData(pod.Name, updatedPolicy, nodeLabels))
 	return framework.NewStatus(framework.Success, "")
 }
 
@@ -198,7 +198,7 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	d, err := readState(state, p.getPreScoreStateKey())
 	if err != nil {
 		// if there is no data in state for the pod, then we should skip score plugin
-		if err == framework.ErrNotFound {
+		if errors.Is(err, framework.ErrNotFound) {
 			return 0, nil
 		}
 		return 0, framework.AsStatus(err)
@@ -217,7 +217,7 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	if err != nil {
 		return 0, framework.AsStatus(err)
 	}
-	
+
 	policyManagesPod := d.policy.PodIsManagedByPolicy(podKey)
 
 	// if the node preference annotation on the pod matches the node group in the current context, then don't filter the node
@@ -282,6 +282,22 @@ func (p *Plugin) RemovePodFromPolicy(obj interface{}) {
 	if removeError != nil {
 		klog.ErrorS(removeError, "error removing pod from placement policy")
 	}
+}
+
+// getPolicyForPod gets the appropriate PlacementPolicy for the pod, if exists, and returns the associated PolicyInfo held in-memory
+func (p *Plugin) getPolicyForPod(ctx context.Context, pod *corev1.Pod) (*core.PolicyInfo, v1alpha1.EnforcementMode, map[string]string, error) {
+	enforcement := v1alpha1.EnforcementModeBestEffort
+	pp, err := p.ppMgr.GetPlacementPolicyForPod(ctx, pod)
+	if err != nil {
+		return nil, enforcement, nil, err
+	}
+
+	if pp == nil {
+		return nil, enforcement, nil, nil
+	}
+
+	policy := p.ppMgr.GetPolicyInfo(pp)
+	return policy, pp.Spec.EnforcementMode, pp.Spec.NodeSelector.MatchLabels, nil
 }
 
 // checkHasLabels checks if the labels exist in the provided set
@@ -370,19 +386,4 @@ func readState(state *framework.CycleState, stateKey framework.StateKey) (*state
 	}
 
 	return d, nil
-}
-
-// getPolicyForPod gets the appropriate PlacementPolicy for the pod, if exists, and returns the associated PolicyInfo held in-memory
-func getPolicyForPod(ctx context.Context, mgr *core.Manager, pod *corev1.Pod) (*core.PolicyInfo, *v1alpha1.EnforcementMode, *map[string]string, error) {
-	pp, err := mgr.GetPlacementPolicyForPod(ctx, pod)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	if pp == nil {		
-		return nil, nil, nil, nil
-	}
-
-	policy := mgr.GetPolicyInfo(pp)
-	return policy, &pp.Spec.EnforcementMode, &pp.Spec.NodeSelector.MatchLabels, nil
 }

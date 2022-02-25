@@ -132,7 +132,6 @@ func TestAddPodIfNotPresent(t *testing.T) {
 					t.Errorf("Expected added pod to be managed by policy but it isn't.")
 				}
 			}
-
 		})
 	}
 }
