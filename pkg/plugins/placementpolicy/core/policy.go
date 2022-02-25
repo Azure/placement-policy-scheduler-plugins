@@ -167,7 +167,7 @@ func (p *PolicyInfo) removePodIfPresent(pod *corev1.Pod) error {
 
 // addPodIfNotPresent adds the pod to the policy's qualifiedPods and managedPods collections as appropriate
 func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
-	key, keyError := framework.GetPodKey(pod)
+	key, err := framework.GetPodKey(pod)
 	if keyError != nil {
 		return keyError
 	}
