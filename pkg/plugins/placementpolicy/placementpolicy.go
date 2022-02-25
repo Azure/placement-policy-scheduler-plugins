@@ -203,7 +203,7 @@ func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod 
 		return framework.NewStatus(framework.Error, "failed to cast state data")
 	}
 
-	//if pod has already been added to the policy in (Pre)Filter, don't need to do anything with scoring
+	// if pod has already been added to the policy in (Pre)Filter, don't need to do anything with scoring
 	if d.status == Added {
 		return framework.NewStatus(framework.Success, "")
 	}
