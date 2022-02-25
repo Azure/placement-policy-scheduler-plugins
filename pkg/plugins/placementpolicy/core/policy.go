@@ -185,7 +185,7 @@ func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
 
 	p.qualifiedPods = p.qualifiedPods.Insert(key)
 
-	targetError := p.setTargetMet()
+	err := p.setTargetMet()
 	if targetError != nil {
 		return targetError
 	}
