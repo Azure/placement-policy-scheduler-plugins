@@ -67,10 +67,8 @@ func New(obj runtime.Object, handle framework.Handle) (framework.Plugin, error) 
 				case *corev1.Pod:
 					return true
 				case cache.DeletedFinalStateUnknown:
-					if _, ok := t.Obj.(*corev1.Pod); ok {
-						return true
-					}
-					return false
+					_, ok := t.Obj.(*corev1.Pod)
+					return ok
 				default:
 					return false
 				}
