@@ -152,7 +152,7 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 		return framework.NewStatus(framework.Error, "failed to cast state data")
 	}
 
-	// if only "matched" in PreFilter, still a success, so continue
+	// if only "matched" in PreFilter, stop filtering
 	if d.status == Matched {
 		state.Write(p.getFilterStateKey(), d)
 		return framework.NewStatus(framework.Success, "")
@@ -164,8 +164,8 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 	nodeMatchesLabels := checkHasLabels(node.Labels, d.nodeLabels)
 
 	podKey, err := framework.GetPodKey(pod)
-	if keyError != nil {
-		return framework.NewStatus(framework.Error, "pod key not found")
+	if err != nil {
+		return framework.AsStatus(err)
 	}
 
 	policyManagesPod := d.policy.PodIsManagedByPolicy(podKey)
@@ -189,9 +189,11 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 func (p *Plugin) PreScore(ctx context.Context, state *framework.CycleState, pod *corev1.Pod, nodes []*corev1.Node) *framework.Status {
 	data, err := state.Read(p.getFilterStateKey())
 	if err != nil {
-		// if there is no data in state for the pod, then we should skip prescore plugin
-		// as there could be no placement policy for the pod
 		if err == framework.ErrNotFound {
+			// if there is no state entry, need to repeat some of the steps of PreFilter to check for policy since it could be that PreFilter/Filter were disabled
+
+			// TODO IMPLEMENT CHECKING FOR POLICY MATCH
+
 			return framework.NewStatus(framework.Success, "")
 		}
 		return framework.NewStatus(framework.Error, fmt.Sprintf("failed to read state: %v", err))
@@ -231,7 +233,7 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 		return 0, framework.NewStatus(framework.Error, "failed to cast state data")
 	}
 
-	//this should never happen since the status is set when saving the prescore state
+	// this should never happen since the status is set when saving the prescore state
 	if d.status != Added {
 		return 0, nil
 	}
@@ -245,9 +247,9 @@ func (p *Plugin) Score(ctx context.Context, state *framework.CycleState, pod *co
 	// defined in the placement policy chosen for the pod.
 	nodeMatchesLabels := checkHasLabels(node.Labels, d.nodeLabels)
 
-	podKey, keyError := framework.GetPodKey(pod)
-	if keyError != nil {
-		return 0, framework.NewStatus(framework.Error, "pod key not found")
+	podKey, err := framework.GetPodKey(pod)
+	if err != nil {
+		return 0, framework.AsStatus(err)
 	}
 	policyManagesPod := d.policy.PodIsManagedByPolicy(podKey)
 

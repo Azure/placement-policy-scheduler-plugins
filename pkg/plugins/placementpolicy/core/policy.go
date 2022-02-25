@@ -12,21 +12,21 @@ import (
 
 type PolicyInfo struct {
 	// PlacementPolicy namespace - from CRD
-	Namespace     string
+	Namespace string
 	// PlacementPolicy name - from CRD
-	Name          string
-	//policy's action - from CRD
-	Action        v1alpha1.Action
-	//policy's target - from CRD
-	TargetSize    *intstr.IntOrString
-	//collection of pods matched if the policy is `BestEffort`; **not** used for computation
-	matchedPods   sets.String
-	//collection of pods that could be managed by the policy; used for computation as the **total**
+	Name string
+	// PlacementPolicy action - from CRD
+	Action v1alpha1.Action
+	// PlacementPolicy target - from CRD
+	TargetSize *intstr.IntOrString
+	// collection of pods matched if the policy is `BestEffort`; **not** used for computation
+	matchedPods sets.String
+	// collection of pods that could be managed by the policy; used for computation as the **total**
 	qualifiedPods sets.String
-	//collection of pods assigned to a node according to the policy; used for computation
-	managedPods   sets.String
-	//does the ratio of managed-to-qualified meet the `TargetSize`
-	targetMet     bool
+	// collection of pods assigned to a node according to the policy; used for computation
+	managedPods sets.String
+	// does the ratio of managed-to-qualified meet the `TargetSize`
+	targetMet bool
 }
 
 func newPolicyInfo(namespace string, name string, action v1alpha1.Action, targetSize *intstr.IntOrString) *PolicyInfo {
@@ -45,7 +45,7 @@ func newPolicyInfo(namespace string, name string, action v1alpha1.Action, target
 
 type PolicyInfos struct {
 	sync.RWMutex
-	//map (by `Namespace`) of map (by `Name`) of `PolicyInfo`
+	// map (by `Namespace`) of map (by `Name`) of `PolicyInfo`
 	internal map[string]map[string]*PolicyInfo
 }
 
@@ -57,17 +57,16 @@ func NewPolicyInfos() PolicyInfos {
 
 // GetPolicy gets the PolicyInfo if it exists, otherwise it creates and returns the newly created PolicyInfo
 func (pi *PolicyInfos) GetPolicy(policyNamespace string, policyName string, action v1alpha1.Action, targetSize *intstr.IntOrString) *PolicyInfo {
-	var policy *PolicyInfo = nil
-	var policyExists bool = false
+	var policy *PolicyInfo
 
 	pi.RLock()
 	namespacePolicies, namespaceExists := pi.internal[policyNamespace]
 	if namespaceExists {
-		policy, policyExists = namespacePolicies[policyName]
+		policy = namespacePolicies[policyName]
 	}
 	pi.RUnlock()
 
-	if policyExists {
+	if policy != nil {
 		return policy
 	}
 
@@ -84,10 +83,22 @@ func (pi *PolicyInfos) GetPolicy(policyNamespace string, policyName string, acti
 	return created
 }
 
-// RemovePolicy removes the policy from the in-memory collection
+// RemovePolicy removes the policy from the in-memory collection; if no other policies remain for namespace, the namespace is deleted
 func (pi *PolicyInfos) RemovePolicy(policyNamespace string, policyName string) {
 	pi.Lock()
 	delete(pi.internal[policyNamespace], policyName)
+	pi.Unlock()
+
+	pi.RLock()
+	policyCount := len(pi.internal[policyNamespace])
+	pi.RUnlock()
+
+	if policyCount > 0 {
+		return
+	}
+
+	pi.Lock()
+	delete(pi.internal, policyNamespace)
 	pi.Unlock()
 }
 
@@ -168,8 +179,8 @@ func (p *PolicyInfo) removePodIfPresent(pod *corev1.Pod) error {
 // addPodIfNotPresent adds the pod to the policy's qualifiedPods and managedPods collections as appropriate
 func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
 	key, err := framework.GetPodKey(pod)
-	if keyError != nil {
-		return keyError
+	if err != nil {
+		return err
 	}
 
 	// if pod is already in the list, do nothing
@@ -177,20 +188,20 @@ func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
 		return nil
 	}
 
-	//if policy is `BestEffort`, this will be true
+	// if policy is `BestEffort`, this will be true
 	if p.PodMatchesPolicy(key) {
-                // once added, don't need to worry about matched anymore
-		p.matchedPods = p.matchedPods.Delete(key) 
+		// once added, don't need to worry about matched anymore
+		p.matchedPods = p.matchedPods.Delete(key)
 	}
 
 	p.qualifiedPods = p.qualifiedPods.Insert(key)
 
-	err := p.setTargetMet()
-	if targetError != nil {
-		return targetError
+	err = p.setTargetMet()
+	if err != nil {
+		return err
 	}
 
-	//if target met, pod doesn't need to be managed
+	// if target met, pod doesn't need to be managed
 	if p.targetMet {
 		return nil
 	}
@@ -213,7 +224,7 @@ func (p *PolicyInfo) setTargetMet() error {
 	}
 
 	managedCount := len(p.managedPods)
-	p.targetMet = managedCount >= target //since the TargetSize is rounded down, the expectation that it will only meet/equal and never exceed
+	p.targetMet = managedCount >= target // since the TargetSize is rounded down, the expectation that it will only meet/equal and never exceed
 	return nil
 }
 
