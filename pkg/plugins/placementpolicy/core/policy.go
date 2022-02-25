@@ -13,7 +13,7 @@ import (
 type PolicyInfo struct {
 	// PlacementPolicy namespace - from CRD
 	Namespace     string
-	//policy's name - from CRD
+	// PlacementPolicy name - from CRD
 	Name          string
 	//policy's action - from CRD
 	Action        v1alpha1.Action
