@@ -11,7 +11,7 @@ import (
 )
 
 type PolicyInfo struct {
-	//policy's namespace - from CRD
+	// PlacementPolicy namespace - from CRD
 	Namespace     string
 	//policy's name - from CRD
 	Name          string
