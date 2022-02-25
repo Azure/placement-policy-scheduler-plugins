@@ -165,7 +165,7 @@ func (p *Plugin) Filter(ctx context.Context, state *framework.CycleState, pod *c
 	// defined in the placement policy chosen for the pod.
 	nodeMatchesLabels := checkHasLabels(node.Labels, d.nodeLabels)
 
-	podKey, keyError := framework.GetPodKey(pod)
+	podKey, err := framework.GetPodKey(pod)
 	if keyError != nil {
 		return framework.NewStatus(framework.Error, "pod key not found")
 	}
