@@ -179,7 +179,8 @@ func (p *PolicyInfo) addPodIfNotPresent(pod *corev1.Pod) error {
 
 	//if policy is `BestEffort`, this will be true
 	if p.PodMatchesPolicy(key) {
-		p.matchedPods = p.matchedPods.Delete(key) //once added, don't need to worry about matched anymore
+                // once added, don't need to worry about matched anymore
+		p.matchedPods = p.matchedPods.Delete(key) 
 	}
 
 	p.qualifiedPods = p.qualifiedPods.Insert(key)
