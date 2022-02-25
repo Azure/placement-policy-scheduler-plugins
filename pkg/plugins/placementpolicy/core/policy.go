@@ -204,7 +204,6 @@ func (p *PolicyInfo) setTargetMet() error {
 	lenAllPods := len(p.qualifiedPods)
 
 	target, err := intstr.GetScaledValueFromIntOrPercent(specTarget, lenAllPods, false)
-
 	if err != nil {
 		return err
 	}
