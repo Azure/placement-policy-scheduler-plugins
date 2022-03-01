@@ -357,9 +357,6 @@ spec:
         image: ghcr.io/azure/placement-policy-scheduler-plugins/placement-policy:v0.1.0
         imagePullPolicy: IfNotPresent
         name: pp-plugins-scheduler
-        securityContext:
-          privileged: true
-          runAsUser: 0
         volumeMounts:
         - name: scheduler-config
           mountPath: /etc/schedulerconfig
