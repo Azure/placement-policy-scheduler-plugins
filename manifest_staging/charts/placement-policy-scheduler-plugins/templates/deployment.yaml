@@ -22,9 +22,6 @@ spec:
         - --config=/etc/schedulerconfig/scheduler-config.yaml
         image: {{ .Values.image }}
         name: pp-plugins-scheduler
-        securityContext:
-          privileged: true
-          runAsUser: 0
         volumeMounts:
         - name: scheduler-config
           mountPath: /etc/schedulerconfig
