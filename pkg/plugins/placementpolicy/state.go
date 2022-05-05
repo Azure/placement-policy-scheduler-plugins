@@ -1,20 +1,21 @@
 package placementpolicy
 
 import (
-	"github.com/Azure/placement-policy-scheduler-plugins/apis/v1alpha1"
-
+	"github.com/Azure/placement-policy-scheduler-plugins/pkg/plugins/placementpolicy/core"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
 type stateData struct {
-	name string
-	pp   *v1alpha1.PlacementPolicy
+	name       string
+	policy     *core.PolicyInfo
+	nodeLabels map[string]string
 }
 
-func NewStateData(name string, pp *v1alpha1.PlacementPolicy) framework.StateData {
+func NewStateData(name string, info *core.PolicyInfo, nodeLabels map[string]string) framework.StateData {
 	return &stateData{
-		name: name,
-		pp:   pp,
+		name:       name,
+		policy:     info,
+		nodeLabels: nodeLabels,
 	}
 }
 
