@@ -1,0 +1,16 @@
+apiVersion: placement-policy.scheduling.x-k8s.io/v1alpha1
+kind: PlacementPolicy
+metadata:
+  name: mixednodepools-strict-must-spot
+spec:
+  weight: 100
+  enforcementMode: Strict
+  podSelector:
+    matchLabels:
+      app: nginx
+  nodeSelector:
+    matchLabels:
+      kubernetes.azure.com/scalesetpriority: spot
+  policy:
+    action: Must
+    targetSize: 40%
