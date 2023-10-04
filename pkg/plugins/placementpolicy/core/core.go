@@ -5,52 +5,35 @@ import (
 	"sort"
 
 	"github.com/Azure/placement-policy-scheduler-plugins/apis/v1alpha1"
-	ppclientset "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/clientset/versioned"
 	ppinformers "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/informers/externalversions/apis/v1alpha1"
 	pplisters "github.com/Azure/placement-policy-scheduler-plugins/pkg/client/listers/apis/v1alpha1"
 	"github.com/Azure/placement-policy-scheduler-plugins/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
 // Manager defines the interfaces for PlacementPolicy management.
 type Manager interface {
 	GetPlacementPolicyForPod(context.Context, *corev1.Pod) (*v1alpha1.PlacementPolicy, error)
-	GetPodsWithLabels(context.Context, map[string]string) ([]*corev1.Pod, error)
-	AnnotatePod(context.Context, *corev1.Pod, *v1alpha1.PlacementPolicy, bool) (*corev1.Pod, error)
-	GetPlacementPolicy(context.Context, string, string) (*v1alpha1.PlacementPolicy, error)
+	GetPolicyInfo(*v1alpha1.PlacementPolicy) *PolicyInfo
+	AddPod(context.Context, *corev1.Pod, *PolicyInfo) (*PolicyInfo, error)
+	RemovePod(*corev1.Pod) error
 }
 
 type PlacementPolicyManager struct {
-	// client is a clientset for the kube API server.
-	client kubernetes.Interface
-	// client is a placementPolicy client
-	ppClient ppclientset.Interface
-	// podLister is pod lister
-	podLister corelisters.PodLister
-	// snapshotSharedLister is pod shared list
-	snapshotSharedLister framework.SharedLister
 	// ppLister is placementPolicy lister
 	ppLister pplisters.PlacementPolicyLister
+	// available policies by namespace
+	policies PolicyInfos
 }
 
 func NewPlacementPolicyManager(
-	client kubernetes.Interface,
-	ppClient ppclientset.Interface,
-	snapshotSharedLister framework.SharedLister,
-	ppInformer ppinformers.PlacementPolicyInformer,
-	podLister corelisters.PodLister) *PlacementPolicyManager {
+	ppInformer ppinformers.PlacementPolicyInformer) *PlacementPolicyManager {
 	return &PlacementPolicyManager{
-		client:               client,
-		ppClient:             ppClient,
-		snapshotSharedLister: snapshotSharedLister,
-		ppLister:             ppInformer.Lister(),
-		podLister:            podLister,
+		ppLister: ppInformer.Lister(),
+		policies: NewPolicyInfos(),
 	}
 }
 
@@ -73,31 +56,6 @@ func (m *PlacementPolicyManager) GetPlacementPolicyForPod(ctx context.Context, p
 	return ppList[0], nil
 }
 
-func (m *PlacementPolicyManager) GetPodsWithLabels(ctx context.Context, podLabels map[string]string) ([]*corev1.Pod, error) {
-	return m.podLister.List(labels.Set(podLabels).AsSelector())
-}
-
-// AnnotatePod annotates the pod with the placement policy.
-func (m *PlacementPolicyManager) AnnotatePod(ctx context.Context, pod *corev1.Pod, pp *v1alpha1.PlacementPolicy, preferredNodeWithMatchingLabels bool) (*corev1.Pod, error) {
-	annotations := map[string]string{}
-	if pod.Annotations != nil {
-		annotations = pod.Annotations
-	}
-
-	preference := "false"
-	if preferredNodeWithMatchingLabels {
-		preference = "true"
-	}
-	annotations[v1alpha1.PlacementPolicyAnnotationKey] = pp.Name
-	annotations[v1alpha1.PlacementPolicyPreferenceAnnotationKey] = preference
-	pod.Annotations = annotations
-	return m.client.CoreV1().Pods(pod.Namespace).Update(ctx, pod, metav1.UpdateOptions{})
-}
-
-func (m *PlacementPolicyManager) GetPlacementPolicy(ctx context.Context, namespace, name string) (*v1alpha1.PlacementPolicy, error) {
-	return m.ppLister.PlacementPolicies(namespace).Get(name)
-}
-
 func (m *PlacementPolicyManager) filterPlacementPolicyList(ppList []*v1alpha1.PlacementPolicy, pod *corev1.Pod) []*v1alpha1.PlacementPolicy {
 	var filteredPPList []*v1alpha1.PlacementPolicy
 	for _, pp := range ppList {
@@ -107,4 +65,84 @@ func (m *PlacementPolicyManager) filterPlacementPolicyList(ppList []*v1alpha1.Pl
 		}
 	}
 	return filteredPPList
+}
+
+// GetPolicyInfo returns the PolicyInfo held in-memory for the given placement policy
+func (m *PlacementPolicyManager) GetPolicyInfo(pp *v1alpha1.PlacementPolicy) *PolicyInfo {
+	policyNamespace := pp.Namespace
+	policyName := pp.Name
+	corePolicy := pp.Spec.Policy
+	action := corePolicy.Action
+	targetSize := corePolicy.TargetSize
+
+	return m.policies.GetPolicy(policyNamespace, policyName, action, targetSize)
+}
+
+type PodAction int16
+
+const (
+	Match PodAction = iota
+	Add
+	Remove
+)
+
+// AddPod adds the provided pod to the provided PolicyInfo and calculates whether target was met
+func (m *PlacementPolicyManager) AddPod(ctx context.Context, pod *corev1.Pod, policy *PolicyInfo) (*PolicyInfo, error) {
+	err := policy.addPodIfNotPresent(pod)
+	if err != nil {
+		return nil, err
+	}
+
+	m.updatePolicies(policy, Add)
+	return policy, nil
+}
+
+// RemovePod removes the provided pod from PolicyInfo held in-memory and re-calculates policy's status (if applicable)
+func (m *PlacementPolicyManager) RemovePod(pod *corev1.Pod) error {
+	key, err := framework.GetPodKey(pod)
+	if err != nil {
+		return err
+	}
+
+	podNamespace := pod.Namespace
+	ppList := m.policies.GetPoliciesByNamespace(podNamespace)
+
+	if ppList == nil {
+		return nil
+	}
+
+	var matchingPolicy *PolicyInfo
+
+	for _, pp := range ppList {
+		if pp.PodQualifiesForPolicy(key) {
+			matchingPolicy = pp
+			break
+		}
+	}
+
+	if matchingPolicy != nil {
+		err := matchingPolicy.removePodIfPresent(pod)
+		if err != nil {
+			return err
+		}
+
+		m.updatePolicies(matchingPolicy, Remove)
+	}
+	return nil
+}
+
+func (m *PlacementPolicyManager) updatePolicies(policy *PolicyInfo, action PodAction) {
+	namespace := policy.Namespace
+
+	if action == Remove {
+		qualifyingCount := len(policy.qualifiedPods)
+
+		if qualifyingCount == 0 {
+			name := policy.Name
+			m.policies.RemovePolicy(namespace, name)
+			return
+		}
+	}
+
+	m.policies.UpdatePolicy(namespace, policy)
 }
